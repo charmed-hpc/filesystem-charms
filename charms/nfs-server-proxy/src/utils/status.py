@@ -147,7 +147,7 @@ class StatusPool(Object):
 
         if status is None or status.status.name == "unknown":
             self._charm.unit.status = WaitingStatus("No status set")
-        elif status.status.name == "active" and not status.message():
+        elif status.status.name == "active" and not status.message:
             self._charm.unit.status = ActiveStatus("")
         else:
             self._charm.unit.status = StatusBase.from_name(
