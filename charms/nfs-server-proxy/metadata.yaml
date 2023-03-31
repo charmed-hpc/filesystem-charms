@@ -1,25 +1,20 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# This file populates the Overview on Charmhub.
-
-# The charm package name, no spaces (required)
-# See https://juju.is/docs/sdk/naming#heading--naming-charms for guidance.
-name: nfs-server-proxy-operator
-
-# The following metadata are human-readable and will be published prominently on Charmhub.
-
-# (Recommended)
-display-name: Charm Template
-
-# (Required)
-summary: A very short one-line summary of the charm.
-
+name: nfs-server-proxy
+display-name: NFS Server Proxy
+summary: Charmed NFS server for non-charmed NFS storage appliances.
 description: |
-  A single sentence that says what the charm is, concisely and memorably.
+  Charmed NFS server for non-charmed NFS storage appliances.
 
-  A paragraph of one to three short sentences, that describe what the charm does.
+  Enable NFS Client charms to mount non-charmed NFS shares.
+maintainers:
+  - Jason C. Nucciarone <jason.nucciarone@canonical.com>
+tags:
+  - filesystem
+  - storage
+  - hpc
 
-  A third paragraph that explains what need the charm meets.
-
-  Finally, a paragraph that describes whom the charm is useful for.
+provides:
+  nfs-share:
+    interface: nfs_share
