@@ -1,0 +1,9 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  endpoint:
+    description: >
+      Set the address of and location of the NFS share on the NFS server.
+      Expected format: <nfs_server_location>:<nfs_share_path>.
+    type: string
