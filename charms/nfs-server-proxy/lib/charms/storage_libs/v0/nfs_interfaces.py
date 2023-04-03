@@ -25,6 +25,7 @@ from ops.charm import (
     RelationChangedEvent,
     RelationDepartedEvent,
     RelationEvent,
+    RelationJoinedEvent,
 )
 from ops.framework import EventSource, Object
 from ops.model import Relation
@@ -72,6 +73,10 @@ def _eval(event: RelationChangedEvent, bucket: str) -> _Transaction:
     return _Transaction(added, changed, deleted)
 
 
+class ServerConnectedEvent(RelationEvent):
+    """Emit when an NFS server is integrated with NFS client."""
+
+
 class _MountEvent(RelationEvent):
     """Base event for mount-related events."""
 
@@ -92,6 +97,7 @@ class UmountShareEvent(_MountEvent):
 class _NFSRequiresEvents(CharmEvents):
     """Events that NFS servers can emit."""
 
+    server_connected = EventSource(ServerConnectedEvent)
     mount_share = EventSource(MountShareEvent)
     umount_share = EventSource(UmountShareEvent)
 
@@ -188,11 +194,20 @@ class NFSRequires(_BaseInterface):
     def __init__(self, charm: CharmBase, integration_name: str) -> None:
         super().__init__(charm, integration_name)
         self.framework.observe(
+            charm.on[integration_name].relation_joined, self._on_relation_joined
+        )
+        self.framework.observe(
             charm.on[integration_name].relation_changed, self._on_relation_changed
         )
         self.framework.observe(
             charm.on[integration_name].relation_departed, self._on_relation_departed
         )
+
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
+        """Handle when client and server are first integrated."""
+        if self.unit.is_leader():
+            _logger.debug("Emitting `ServerConnected` event from `RelationJoined` hook")
+            self.on.server_connected.emit(event.relation, app=event.app, unit=event.unit)
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle when the databag between client and server has been updated."""
