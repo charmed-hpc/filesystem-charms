@@ -12,7 +12,119 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Library to manage integrations between NFS share providers and consumers."""
+"""Library to manage integrations between NFS share providers and consumers.
+
+This library contains the NFSProvides and NFSRequires classes for managing an
+integration between an NFS server operator and NFS client operator.
+
+## Requires Charm (NFS Client)
+
+This library provides a uniform interface for charms that need to mount, unmount,
+or request an NFS share, and convenience methods for consuming data sent by an
+NFS server charm. Here is an example of using a `ServerConnectedEvent` to request
+a new NFS share:
+
+```python
+from charms.storage_libs.v0.nfs_interfaces import (
+    NFSRequires,
+    ServerConnectedEvent,
+)
+
+
+class ApplicationCharm(CharmBase):
+    # Application charm that needs to mount NFS shares.
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        # Charm events defined in the NFSRequires class.
+        self.nfs_share = NFSRequires(self, "nfs-share")
+        self.framework.observe(
+            self.nfs_share.on.server_connected,
+            self._on_server_connected,
+        )
+
+    def _on_server_connected(self, event: ServerConnectedEvent) -> None:
+        # Handle when new NFS server is connected.
+        self._nfs_share.request_share(
+            event.relation.id,
+            name="/data",
+            size=100,
+            allowlist="0.0.0.0/0",
+        )
+
+        self.unit.status = WaitingStatus("Waiting for NFS share to be created.")
+```
+
+The NFSRequires class provides a few custom events to handle specific situations
+related to mounting an NFS share. They are all listed below:
+
+- `server_connected`: Event emitted when the NFS client is connected to the NFS server.
+    Here is where NFS clients will commonly request the NFS share they need created.
+- `mount_share`: Event emitted when NFS share is ready to be mounted.
+- `umount_share`: Event emitted when NFS share is ready or needs to be unmounted.
+
+> __Note:__ This charm library only supports one NFS server being integrated with the
+> NFS client at a time. This is to prevent the NFS client from having to manage and
+> request multiple NFS shares, and ensure that NFS clients are creating unique mount points.
+
+## Provides Charm (NFS Server)
+
+This library provides a uniform interface for charms that need to process NFS share
+requests, and convenience methods for consuming data sent by an NFS client charm.
+Here is an example of using a `ShareRequestedEvent` to create a new NFS share:
+
+```python
+from charms.storage_libs.v0.nfs_interfaces import (
+    NFSProvides,
+    ShareRequestedEvent,
+)
+
+
+class ApplicationCharm(CharmBase):
+    # Application charm that exports mountable NFS shares.
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        # Charm events defined in the NFSProvides class.
+        self.nfs_share = NFSProvides(self, "nfs-share")
+        self.framework.observe(
+            self.nfs_share.on.share_requested,
+            self._on_share_requested,
+        )
+
+    def _on_share_requested(self, event: ShareRequestedEvent) -> None:
+        # Handle when NFS client requests NFS share.
+        if not self.unit.is_leader():
+            return
+
+        share = pathlib.Path(f"/var/local/{event.name}")
+        if not share.exists()
+            storage = pathlib.Path(f"/var/local/storage/{event.name}")
+            storage.touch()
+            subprocess.run(["truncate", "-s", f"{event.size}G", share])
+            subprocess.run(["mke2fs", "-t", "ext4", "-F", share])
+            share.mkdir()
+            subprocess.run(["mount", storage, share])
+            with open("/etc/exports", "at") as fout:
+                fout.write(f"{share} *(rw,sync,no_subtree_check,no_root_squash)")
+            subprocess.run(["exportfs", "-a"])
+            systemd.service_restart("nfs-kernel-server")
+
+        hostname = subprocess.run(["hostname", "-I"], text=True).stdout
+        self.nfs_share.set_endpoint(event.relation.id, f"{hostname}:{share}")
+        self.unit.status = ActiveStatus("Exporting shares")
+```
+
+The NFSProvides class only provides one custom event:
+
+- `share_requested`: Event emitted when NFS client requests an NFS share.
+
+> __Note:__ It is the responsibility of the NFS Provider charm to provide
+> the implementation for creating a new NFS share. NFSProvides just provides
+> the interface for the integration.
+"""
 
 import json
 import logging
@@ -29,6 +141,16 @@ from ops.charm import (
 )
 from ops.framework import EventSource, Object
 from ops.model import Relation
+
+# The unique Charmhub library identifier, never change it
+LIBID = "e70144cb4196455ca4436bec5d1e6a36"
+
+# Increment this major API version when introducing breaking changes
+LIBAPI = 0
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
 
 _logger = logging.getLogger(__name__)
 
@@ -227,8 +349,8 @@ class NFSRequires(_BaseInterface):
         self,
         integration_id: int,
         name: str,
-        allowlist: Optional[Union[str, List[str]]],
-        size: Optional[int],
+        allowlist: Optional[Union[str, List[str]]] = None,
+        size: Optional[int] = None,
     ) -> None:
         """Request access to an NFS share.
 
@@ -252,9 +374,9 @@ class NFSRequires(_BaseInterface):
             if type(size) == int:
                 _size = size
             else:
-                _size = None
+                _size = -1
 
-            params = {"name": name, "allowlist": _allowlist, "size": _size}
+            params = {"name": name, "allowlist": ",".join(_allowlist), "size": str(_size)}
             _logger.debug(f"Requesting NFS share with parameters {params}")
             self._update_data(integration_id, params)
 
