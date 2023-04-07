@@ -8,6 +8,8 @@ description: |
   Charmed NFS server for non-charmed NFS storage appliances.
 
   Enable NFS Client charms to mount non-charmed NFS shares.
+source: https://github.com/canonical/nfs-server-proxy-operator
+issues: https://github.com/canonical/nfs-server-proxy-operator/issues
 maintainers:
   - Jason C. Nucciarone <jason.nucciarone@canonical.com>
 tags:
