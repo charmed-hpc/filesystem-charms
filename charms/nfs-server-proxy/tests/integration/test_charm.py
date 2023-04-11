@@ -60,7 +60,9 @@ async def test_build_and_deploy(
     await ops_test.model.integrate(f"{NFS_CLIENT}:nfs-share", f"{NFS_SERVER_PROXY}:nfs-share")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[NFS_SERVER_PROXY, NFS_CLIENT], status="active", timeout=1000)
+        await ops_test.model.wait_for_idle(
+            apps=[NFS_SERVER_PROXY, NFS_CLIENT], status="active", timeout=1000
+        )
         assert ops_test.model.applications[NFS_SERVER_PROXY].units[0].workload_status == "active"
 
 
