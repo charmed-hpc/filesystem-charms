@@ -71,5 +71,11 @@ jobs:
         with:
           provider: lxd
           juju-channel: 3.1/stable
+      - name: Charmcraft logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: charmcraft-log
+          path: |
+            /home/runner/.local/state/charmcraft
       - name: Run integration tests
         run: tox -e integration
