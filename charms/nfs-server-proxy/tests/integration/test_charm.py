@@ -28,12 +28,13 @@ async def test_build_and_deploy(
     ops_test: OpsTest, nfs_server_proxy_charm: Coroutine[Any, Any, pathlib.Path], base
 ) -> None:
     """Test that nfs-server-proxy can stabilize against nfs-client."""
+    charm = str(await nfs_server_proxy_charm)
     modify_default_profile()
     endpoint = bootstrap_nfs_server()
     logger.info(f"Deploying{ NFS_SERVER_PROXY} against {NFS_CLIENT} and {BASE}")
     await asyncio.gather(
         ops_test.model.deploy(
-            str(await nfs_server_proxy_charm),
+            charm,
             application_name=NFS_SERVER_PROXY,
             config={"endpoint": endpoint},
             num_units=1,

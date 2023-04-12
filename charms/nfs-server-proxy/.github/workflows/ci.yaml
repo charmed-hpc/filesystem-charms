@@ -66,12 +66,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Install charmcraft
-        run: sudo snap install charmcraft --classic
-      - name: Set up LXD cloud
-        uses: canonical/setup-lxd@v0.1.0
-        with:
-          channel: 5.9/stable
       - name: Set up operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -79,9 +73,3 @@ jobs:
           juju-channel: 3.1/stable
       - name: Run integration tests
         run: tox -e integration
-      - name: Charmcraft logs
-        uses: actions/upload-artifact@v3
-        with:
-          name: charmcraft-log
-          path: |
-            /home/runner/.local/state/charmcraft
