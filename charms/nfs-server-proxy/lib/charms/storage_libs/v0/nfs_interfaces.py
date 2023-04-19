@@ -150,7 +150,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 3
 
 _logger = logging.getLogger(__name__)
 
@@ -333,17 +333,15 @@ class NFSRequires(_BaseInterface):
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle when the databag between client and server has been updated."""
-        if self.unit.is_leader():
-            transaction = _eval(event, self.unit)
-            if "endpoint" in transaction.added:
-                _logger.debug("Emitting `MountShare` event from `RelationChanged` hook")
-                self.on.mount_share.emit(event.relation, app=event.app, unit=event.unit)
+        transaction = _eval(event, self.unit)
+        if "endpoint" in transaction.added:
+            _logger.debug("Emitting `MountShare` event from `RelationChanged` hook")
+            self.on.mount_share.emit(event.relation, app=event.app, unit=event.unit)
 
     def _on_relation_departed(self, event: RelationDepartedEvent) -> None:
         """Handle when server departs integration."""
-        if self.unit.is_leader():
-            _logger.debug("Emitting `UmountShare` event from `RelationDeparted` hook")
-            self.on.umount_share.emit(event.relation, app=event.app, unit=event.unit)
+        _logger.debug("Emitting `UmountShare` event from `RelationDeparted` hook")
+        self.on.umount_share.emit(event.relation, app=event.app, unit=event.unit)
 
     def request_share(
         self,
@@ -369,7 +367,7 @@ class NFSRequires(_BaseInterface):
             elif type(allowlist) == list:
                 _allowlist = allowlist
             else:
-                _allowlist = None
+                _allowlist = ["0.0.0.0"]
 
             if type(size) == int:
                 _size = size
