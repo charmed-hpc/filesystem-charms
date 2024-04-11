@@ -1,0 +1,46 @@
+name: cephfs-server-proxy
+type: charm
+
+title: CephFS Proxy
+
+summary: Charmed Ceph FS server for non-charmed Ceph storage appliances.
+
+
+description: |
+  Charmed Ceph FS server for non-charmed Ceph storage appliances.
+
+  Enable CephFS Client charms to mount non-charmed Ceph shares.
+
+bases:
+  - build-on:
+    - name: ubuntu
+      channel: "22.04"
+    run-on:
+    - name: ubuntu
+      channel: "22.04"
+
+provides:
+  cephfs-share:
+    interface: cephfs_share
+
+config:
+  options:
+    fsid:
+      type: string
+      description: fsid of the Ceph cluster.
+    sharepoint:
+      type: string
+      description: |
+        Name and path of the exported filesystem on the Ceph cluster.
+        Expected format: <filesystem_name>:<filesystem_shared_path>
+    monitor-hosts:
+      type: string
+      description: |
+        Space delimited list of existing Ceph monitor addresses.
+        Expected format: <ip/hostname>:<port> <ip/hostname>:<port>
+    auth-info:
+      type: string
+      description: |
+        Username and Cephx key to authenticate against the exported CephFS share.
+        Expected format: <username>:<cephx-base64-key>
+    
