@@ -19,6 +19,10 @@ bases:
     - name: ubuntu
       channel: "22.04"
 
+peers:
+  proxy:
+    interface: proxy
+
 provides:
   cephfs-share:
     interface: cephfs_share

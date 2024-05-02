@@ -12,6 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Library to manage integrations between CephFS share providers and consumers.
+
+This library contains the CephFSProvides and CephFSRequires classes for managing an
+integration between a CephFS server operator and a CephFS client operator.
+
+## CephFSRequires (CephFS Client)
+
+This class provides a uniform interface for charms that need to mount, unmount,
+or request CephFS shares, and convenience methods for consuming data sent by a
+CephFS server charm.
+
+### Defined events
+
+- `server_connected`: Event emitted when the CephFS client is connected to the CephFS server.
+    Here is where CephFS clients will commonly request the CephFS share they need created.
+- `mount_share`: Event emitted when the CephFS share is ready to be mounted.
+- `umount_share`: Event emitted when the CephFS share is ready or needs to be unmounted.
+
+> __Note:__ This charm library only supports a 1-on-1 relation between a CephFS server and a CephFS client.
+> This is to prevent the CephFS client from having to manage and request multiple CephFS shares,
+> and ensure that CephFS clients are creating unique mount points.
+
+## CephFSProvides (CephFS Server)
+
+This library provides a uniform interface for charms that need to process CephFS share
+requests, and convenience methods for consuming data sent by a CephFS client charm.
+
+### Defined events
+
+- `share_requested`: Event emitted when the CephFS client requests a CephFS share.
+
+> __Note:__ It is the responsibility of the CephFS Provider charm to provide
+> the implementation for creating a new CephFS share. CephFSProvides just provides
+> the interface for the integration.
+"""
+
 import json
 import logging
 from dataclasses import dataclass, asdict
@@ -29,7 +65,7 @@ from ops.framework import EventSource, Object
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
-LIBID = "UNPUBLISHED"
+LIBID = "874169fd0b874bbeb616941ada231d99"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -83,31 +119,38 @@ def _eval(event: RelationChangedEvent, bucket: str) -> _Transaction:
 class ServerConnectedEvent(RelationEvent):
     """Emit when a CephFS server is integrated with CephFS client."""
 
+@dataclass
+class CephFSAuthInfo:
+    """Authorization info to access a CephFS share.
+    
+    Attributes:
+        username: Name of the user authorized to access the Ceph filesystem.
+        key: Cephx key for the authorized user.
+    """
+    username: str
+    key: str
+
 @dataclass(init=False)
 class CephFSShareInfo:
-    """Information about a shared CephFS."""
+    """Information about a shared CephFS.
+    
+    Attributes:
+        fsid: ID of the Ceph cluster.
+        name: Name of the exported Ceph filesystem.
+        path: Exported path of the Ceph filesystem.
+        monitor_hosts: Address list of the available Ceph MON nodes.
+    """
     fsid: str
-    """Id of the Ceph cluster."""
     name: str
-    """Name of the exported CephFS."""
     path: str
-    """Exported path of the CephFS."""
     monitor_hosts: [str]
-    """Address list of the available Ceph MON nodes."""
-    auth_id: str
-    """Secret ID for the auth info to authenticate against the CephFS share."""
 
-    dict = asdict
-
-    def __init__(self, fsid: str, name: str, path: str, monitor_hosts: Iterable[str], auth_id: str):
+    def __init__(self, fsid: str, name: str, path: str, monitor_hosts: Iterable[str]):
         self.fsid = fsid
         self.name = name
         self.path = path
-        # Manual conversion to avoid storing a `op.StoredList` on the info.
+        # Cast `ops.StoredList` to `List[str]` to avoid exposing `ops.StoredState` backend.
         self.monitor_hosts = list(monitor_hosts)
-        self.auth_id = auth_id
-
-
 
 class _MountEvent(RelationEvent):
     """Base event for mount-related events."""
@@ -118,6 +161,29 @@ class _MountEvent(RelationEvent):
         if not (share_info := self.relation.data[self.relation.app].get("share_info")):
             return
         return CephFSShareInfo(**json.loads(share_info))
+    
+    @property
+    def auth_info(self) -> Optional[CephFSAuthInfo]:
+        """Get CephFS auth info."""
+        if not (auth := self.relation.data[self.relation.app].get("auth")):
+            return
+
+        # This will make it easier to integrate
+        # with reactive providers that don't support secrets.
+        try:
+            kind, data = auth.split(":", 1)
+        except ValueError:
+            _logger.warning("Could not get the kind of auth info")
+            return
+
+        if kind == "secret":
+            auth = self.framework.model.get_secret(id=auth).get_content()
+        elif kind == "plain":
+            auth = json.loads(data)
+        else:
+            _logger.warning("Invalid kind for auth info.")
+            return
+        return CephFSAuthInfo(**auth)
 
 
 class MountShareEvent(_MountEvent):
@@ -257,7 +323,6 @@ class CephFSRequires(_BaseInterface):
             Only application leader unit can request a CephFS share.
         """
         if self.unit.is_leader():
-
             params = {"name": name}
             _logger.debug(f"Requesting CephFS share with parameters {params}")
             self._update_data(integration_id, params)
@@ -282,17 +347,29 @@ class CephFSProvides(_BaseInterface):
                 _logger.debug("Emitting `RequestShare` event from `RelationChanged` hook")
                 self.on.share_requested.emit(event.relation, app=event.app, unit=event.unit)
 
-    def set_share(self, integration_id: int, share_info: CephFSShareInfo) -> None:
-        """Set share info for mounting a CephFS share.
+    def set_share(self, integration_id: int, share_info: CephFSShareInfo, auth_info: CephFSAuthInfo) -> None:
+        """Set info for mounting a CephFS share.
 
         Args:
             integration_id: Identifier for specific integration.
             share_info: Information required to mount the CephFS share.
+            auth_info: Information required to authenticate against the Ceph cluster.
 
         Notes:
-            Only application leader unit can set the CephFS share data.
+            Only the application leader unit can set the CephFS share data.
         """
         if self.unit.is_leader():
-            share_info = json.dumps(share_info.dict())
+            share_info = json.dumps(asdict(share_info))
             _logger.debug(f"Exporting CephFS share with info {share_info}")
-            self._update_data(integration_id, {"share_info": share_info})
+
+            integration = self.charm.model.get_relation(self.integration_name, integration_id)
+            secret = self.app.add_secret(
+                asdict(auth_info),
+                label="auth_info",
+                description="Auth info to authenticate against the CephFS share"
+            )
+            secret.grant(integration)
+            self._update_data(integration_id, {
+                "share_info": share_info,
+                "auth": secret.id
+            })
