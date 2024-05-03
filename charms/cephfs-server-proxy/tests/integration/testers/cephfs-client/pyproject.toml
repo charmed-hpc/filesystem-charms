@@ -1,0 +1,4 @@
+# Linting tools configuration
+[tool.ruff]
+extend = "../../../../pyproject.toml"
+extend-exclude = ["lib"]
