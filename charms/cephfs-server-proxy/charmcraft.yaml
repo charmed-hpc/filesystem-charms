@@ -1,3 +1,5 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
 name: cephfs-server-proxy
 type: charm
 
@@ -18,6 +20,10 @@ bases:
     run-on:
     - name: ubuntu
       channel: "22.04"
+
+peers:
+  proxy:
+    interface: proxy
 
 provides:
   cephfs-share:
@@ -43,4 +49,3 @@ config:
       description: |
         Username and Cephx key to authenticate against the exported CephFS share.
         Expected format: <username>:<cephx-base64-key>
-    
