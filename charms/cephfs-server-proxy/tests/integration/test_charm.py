@@ -92,3 +92,26 @@ async def test_share_active(ops_test: OpsTest) -> None:
     assert "test-1" in result
     assert "test-2" in result
     assert "test-3" in result
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.order(4)
+async def test_reintegrate(ops_test: OpsTest) -> None:
+    """Test that the client can reintegrate with the server."""
+    await ops_test.model.applications[CLIENT].destroy_relation(
+        "cephfs-share", f"{PROXY}:cephfs-share", block_until_done=True
+    )
+
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(
+            apps=[PROXY], status="active", raise_on_blocked=True, timeout=1000
+        )
+        await ops_test.model.wait_for_idle(
+            apps=[CLIENT], status="waiting", raise_on_error=True, timeout=1000
+        )
+
+    await ops_test.model.integrate(f"{CLIENT}:cephfs-share", f"{PROXY}:cephfs-share")
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(
+            apps=[PROXY, CLIENT], status="active", raise_on_blocked=True, timeout=360
+        )

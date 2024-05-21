@@ -50,9 +50,10 @@ requests, and convenience methods for consuming data sent by a CephFS client cha
 
 import json
 import logging
-from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional, Set, Union, Iterable
+from dataclasses import asdict, dataclass
+from typing import Dict, Iterable, List, Optional, Set
 
+import ops
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -62,7 +63,7 @@ from ops.charm import (
     RelationJoinedEvent,
 )
 from ops.framework import EventSource, Object
-from ops.model import Relation
+from ops.model import Relation, SecretNotFoundError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "874169fd0b874bbeb616941ada231d99"
@@ -72,9 +73,10 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 _logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class _Transaction:
@@ -107,8 +109,10 @@ def _eval(event: RelationChangedEvent, bucket: str) -> _Transaction:
     added = new_data.keys() - old_data.keys()
     # These are the keys that were removed from the databag and triggered this event.
     deleted = old_data.keys() - new_data.keys()
-    # These are the keys that already existed in the databag, but had their values changed.
-    changed = {key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]}
+    # These are the keys that were added or already existed in the databag, but had their values changed.
+    changed = added.union(
+        {key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]}
+    )
     # Convert the new_data to a serializable format and save it for a next diff check.
     event.relation.data[bucket].update({"cache": json.dumps(new_data)})
 
@@ -119,27 +123,31 @@ def _eval(event: RelationChangedEvent, bucket: str) -> _Transaction:
 class ServerConnectedEvent(RelationEvent):
     """Emit when a CephFS server is integrated with CephFS client."""
 
+
 @dataclass
 class CephFSAuthInfo:
     """Authorization info to access a CephFS share.
-    
+
     Attributes:
         username: Name of the user authorized to access the Ceph filesystem.
         key: Cephx key for the authorized user.
     """
+
     username: str
     key: str
+
 
 @dataclass(init=False)
 class CephFSShareInfo:
     """Information about a shared CephFS.
-    
+
     Attributes:
         fsid: ID of the Ceph cluster.
         name: Name of the exported Ceph filesystem.
         path: Exported path of the Ceph filesystem.
         monitor_hosts: Address list of the available Ceph MON nodes.
     """
+
     fsid: str
     name: str
     path: str
@@ -152,6 +160,7 @@ class CephFSShareInfo:
         # Cast `ops.StoredList` to `List[str]` to avoid exposing `ops.StoredState` backend.
         self.monitor_hosts = list(monitor_hosts)
 
+
 class _MountEvent(RelationEvent):
     """Base event for mount-related events."""
 
@@ -161,7 +170,7 @@ class _MountEvent(RelationEvent):
         if not (share_info := self.relation.data[self.relation.app].get("share_info")):
             return
         return CephFSShareInfo(**json.loads(share_info))
-    
+
     @property
     def auth_info(self) -> Optional[CephFSAuthInfo]:
         """Get CephFS auth info."""
@@ -177,7 +186,7 @@ class _MountEvent(RelationEvent):
             return
 
         if kind == "secret":
-            auth = self.framework.model.get_secret(id=auth).get_content()
+            auth = self.framework.model.get_secret(id=auth).get_content(refresh=True)
         elif kind == "plain":
             auth = json.loads(data)
         else:
@@ -258,7 +267,7 @@ class _BaseInterface(Object):
         return result
 
     def _update_data(self, integration_id: int, data: Dict) -> None:
-        """Updates a set of key-value pairs in integration.
+        """Update a set of key-value pairs in integration.
 
         Args:
             integration_id: Identifier of particular integration.
@@ -299,7 +308,12 @@ class CephFSRequires(_BaseInterface):
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle when the databag between client and server has been updated."""
         transaction = _eval(event, self.unit)
-        if "share_info" in transaction.added:
+
+        if (
+            "share_info" in transaction.changed
+            or "auth" in transaction.changed
+            or "auth-rev" in transaction.changed
+        ):
             _logger.debug("Emitting `MountShare` event from `RelationChanged` hook")
             self.on.mount_share.emit(event.relation, app=event.app, unit=event.unit)
 
@@ -338,6 +352,11 @@ class CephFSProvides(_BaseInterface):
         self.framework.observe(
             charm.on[integration_name].relation_changed, self._on_relation_changed
         )
+        self.framework.observe(charm.on.secret_remove, self._on_secret_remove)
+
+    def _on_secret_remove(self, event: ops.SecretRemoveEvent):
+        """Remove revisions that are no longer tracked by any observer."""
+        event.secret.remove_revision(event.revision)
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle when the databag between client and server has been updated."""
@@ -347,7 +366,9 @@ class CephFSProvides(_BaseInterface):
                 _logger.debug("Emitting `RequestShare` event from `RelationChanged` hook")
                 self.on.share_requested.emit(event.relation, app=event.app, unit=event.unit)
 
-    def set_share(self, integration_id: int, share_info: CephFSShareInfo, auth_info: CephFSAuthInfo) -> None:
+    def set_share(
+        self, integration_id: int, share_info: CephFSShareInfo, auth_info: CephFSAuthInfo
+    ) -> None:
         """Set info for mounting a CephFS share.
 
         Args:
@@ -360,16 +381,27 @@ class CephFSProvides(_BaseInterface):
         """
         if self.unit.is_leader():
             share_info = json.dumps(asdict(share_info))
+            auth_info = asdict(auth_info)
             _logger.debug(f"Exporting CephFS share with info {share_info}")
 
+            try:
+                secret = self.model.get_secret(label="auth_info")
+                secret.set_content(auth_info)
+                secret.get_content(refresh=True)
+            except SecretNotFoundError:
+                secret = self.app.add_secret(
+                    auth_info,
+                    label="auth_info",
+                    description="Auth info to authenticate against the CephFS share",
+                )
+
             integration = self.charm.model.get_relation(self.integration_name, integration_id)
-            secret = self.app.add_secret(
-                asdict(auth_info),
-                label="auth_info",
-                description="Auth info to authenticate against the CephFS share"
-            )
             secret.grant(integration)
-            self._update_data(integration_id, {
-                "share_info": share_info,
-                "auth": secret.id
-            })
+            self._update_data(
+                integration_id,
+                {
+                    "share_info": share_info,
+                    "auth": secret.id,
+                    "auth-rev": str(secret.get_info().revision),
+                },
+            )
