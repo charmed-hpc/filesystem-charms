@@ -8,9 +8,10 @@ import unittest
 from unittest.mock import PropertyMock, patch
 
 import ops.testing
-from charm import NFSServerProxyCharm
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
+
+from charm import NFSServerProxyCharm
 
 
 class TestCharm(unittest.TestCase):

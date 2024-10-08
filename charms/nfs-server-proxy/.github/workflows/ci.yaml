@@ -29,20 +29,6 @@ jobs:
       - name: Run linters
         run: tox -e lint
 
-  check-libraries:
-    name: Check charm libraries
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
-        with:
-          fetch-depth: 0
-      - name: Check libraries
-        uses: canonical/charming-actions/check-libraries@2.4.0
-        with:
-          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-
   unit-test:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -60,7 +46,6 @@ jobs:
     needs:
       - inclusive-naming-check
       - lint
-      - check-libraries
       - unit-test
     timeout-minutes: 120
     steps:

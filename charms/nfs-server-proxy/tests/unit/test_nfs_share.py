@@ -7,9 +7,10 @@
 import unittest
 
 import ops.testing
-from charm import NFSServerProxyCharm
 from ops.model import BlockedStatus
 from ops.testing import Harness
+
+from charm import NFSServerProxyCharm
 
 
 class TestNFSShare(unittest.TestCase):
