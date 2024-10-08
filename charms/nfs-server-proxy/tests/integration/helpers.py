@@ -44,10 +44,10 @@ def bootstrap_nfs_server() -> str:
     config = {
         "name": "nfs-server",
         "source": {
-            "alias": "ubuntu/jammy/amd64",
+            "alias": "jammy/amd64",
             "mode": "pull",
             "protocol": "simplestreams",
-            "server": "https://images.linuxcontainers.org",
+            "server": "https://cloud-images.ubuntu.com/releases",
             "type": "image",
         },
         "type": "container",
