@@ -82,7 +82,7 @@ class CephFSServerProxyCharm(ops.CharmBase):
 
     def _on_share_requested(self, event: ShareRequestedEvent) -> None:
         """Handle when CephFS client requests a CephFS share."""
-        logger.debug(("NFS share requested with parameters " f"('name'={event.name})"))
+        logger.debug(("CephFS share requested with parameters " f"('name'={event.name})"))
         if not (mount_info := self.mount_info):
             logger.warning("Deferring ShareRequested event because filesystem info is not set")
             self.unit.status = ops.BlockedStatus("No configured filesystem info")

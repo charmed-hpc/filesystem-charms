@@ -7,9 +7,10 @@ from pathlib import Path
 
 import ops.testing
 import yaml
-from charm import PEER_NAME, CephFSServerProxyCharm
 from charms.storage_libs.v0.cephfs_interfaces import CephFSAuthInfo, CephFSShareInfo
 from ops.model import ActiveStatus, BlockedStatus
+
+from charm import PEER_NAME, CephFSServerProxyCharm
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]

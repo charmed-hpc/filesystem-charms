@@ -6,9 +6,10 @@ import unittest
 from pathlib import Path
 
 import yaml
-from charm import PEER_NAME, CephFSServerProxyCharm
 from ops import BlockedStatus
 from ops.testing import Harness
+
+from charm import PEER_NAME, CephFSServerProxyCharm
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]
