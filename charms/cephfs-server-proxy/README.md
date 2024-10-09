@@ -4,7 +4,7 @@ A [Juju](https://juju.is) operator for proxying exported Ceph filesystems.
 
 [![Charmhub Badge](https://charmhub.io/cephfs-server-proxy/badge.svg)](https://charmhub.io/cephfs-server-proxy)
 [![CI](https://github.com/canonical/cephfs-server-proxy-operator/actions/workflows/ci.yaml/badge.svg)](https://github.com/canonical/cephfs-server-proxy-operator/actions/workflows/ci.yaml/badge.svg)
-[![Release](https://github.com/canonical/cephfs-server-proxy-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/cephfs-client-operator/actions/workflows/release.yaml/badge.svg)
+[![Publish](https://github.com/canonical/cephfs-server-proxy-operator/actions/workflows/publish.yaml/badge.svg)](https://github.com/canonical/cephfs-server-proxy-operator/actions/workflows/publish.yaml/badge.svg)
 [![Matrix](https://img.shields.io/matrix/ubuntu-hpc%3Amatrix.org?logo=matrix&label=ubuntu-hpc)](https://matrix.to/#/#ubuntu-hpc:matrix.org)
 
 
@@ -63,6 +63,7 @@ exit
 Now deploy the CephFS server proxy operator with a CephFS client operator and principal charm:
 
 ```shell
+juju add-model ceph
 juju deploy cephfs-server-proxy --channel latest/edge \
   --config fsid=<FSID> \
   --config sharepoint=cephfs:/ \

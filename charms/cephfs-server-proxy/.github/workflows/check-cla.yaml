@@ -8,7 +8,7 @@ on:
 
 jobs:
   cla-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check if Canonical CLA has been signed
         uses: canonical/has-signed-canonical-cla@v1
