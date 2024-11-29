@@ -17,6 +17,10 @@ bases:
       - name: ubuntu
         channel: "22.04"
 
+peers:
+  server-peers:
+    interface: server_peers 
+
 provides:
   fs-share:
     interface: fs_share

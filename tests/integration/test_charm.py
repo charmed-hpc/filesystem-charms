@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024 Jose Julian Espina
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import asyncio
@@ -28,15 +28,25 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Deploy the charm and wait for active/idle status
     await asyncio.gather(
-        ops_test.model.deploy(charm, application_name=APP_NAME),
-        ops_test.model.deploy(server, application_name="server1"),
-        ops_test.model.deploy(server, application_name="server2"),
+        ops_test.model.deploy("ubuntu", application_name="ubuntu"),
+        ops_test.model.deploy(charm, application_name=APP_NAME, num_units=0, config={
+            "mountinfo": """
+            {
+                "nfs": {
+                    "mountpoint": "/data",
+                    "nodev": true,
+                    "read-only": true
+                }
+            }
+            """
+        }),
+        ops_test.model.deploy(server, application_name="server"),
         ops_test.model.wait_for_idle(
-            apps=[APP_NAME, "server1", "server2"], status="active", raise_on_blocked=True, timeout=1000
+            apps=["server", "ubuntu"], status="active", raise_on_blocked=True, timeout=1000
         ),
     )
 
-    await ops_test.model.integrate(f"{APP_NAME}:fs-share", "server1:fs-share")
-    await ops_test.model.integrate(f"{APP_NAME}:fs-share", "server2:fs-share")
+    await ops_test.model.integrate(f"{APP_NAME}:juju-info", "ubuntu:juju-info")
+    await ops_test.model.integrate(f"{APP_NAME}:fs-share", "server:fs-share")
 
-    await ops_test.model.wait_for_idle(apps=[APP_NAME, "server1", "server2"], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[APP_NAME, "ubuntu", "server"], status="active", timeout=1000)

@@ -1,3 +1,30 @@
+[project]
+name = "filesystem-client"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "ops ~= 2.8",
+    "jsonschema ~= 4.23.0" 
+]
+
+[project.optional-dependencies]
+dev = [
+  # Linting
+  "ruff",
+  "codespell",
+  "pyright",
+
+  # Unit
+  "pytest",
+  "coverage[toml]",
+  "ops[testing]",
+
+  # Integration
+  "juju",
+  "pytest-operator",
+]
+
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true

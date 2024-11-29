@@ -1,59 +1,70 @@
-# This file configures Charmcraft.
-# See https://juju.is/docs/sdk/charmcraft-config for guidance.
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
 
-# (Required)
-name: storage-client
+name: filesystem-client
 
-
-# (Required)
 type: charm
 
+title: Filesystem Client
 
-# (Recommended)
-title: Charm Template
+summary: Mount filesystems on machine charms.
 
-
-# (Required)
-summary: A very short one-line summary of the charm.
-
-
-# (Required)
 description: |
-  A single sentence that says what the charm is, concisely and memorably.
+  Mount filesystems on machine charms.
 
-  A paragraph of one to three short sentences, that describe what the charm does.
+  Enables access to exported filesystems.
 
-  A third paragraph that explains what need the charm meets.
+base: ubuntu@24.04
+platforms:
+  amd64:
 
-  Finally, a paragraph that describes whom the charm is useful for.
+parts:
+  charm:
+    build-packages:
+      - just
+    build-snaps:
+      - astral-uv
+    charm-requirements: ["requirements.txt"]
+    charm-binary-python-packages:
+      - jsonschema ~= 4.23.0
+    override-build: |
+      just requirements
+      craftctl default
 
+subordinate: true
 
-# (Required for 'charm' type)
-bases:
-  - build-on:
-    - name: ubuntu
-      channel: "22.04"
-    run-on:
-    - name: ubuntu
-      channel: "22.04"
-
-
-# (Optional) Configuration options for the charm
-# This config section defines charm config options, and populates the Configure
-# tab on Charmhub.
-# More information on this section at https://juju.is/docs/sdk/charmcraft-yaml#heading--config
-# General configuration documentation: https://juju.is/docs/sdk/config
-config:
-  options:
-    # An example config option to customise the log level of the workload
-    log-level:
-      description: |
-        Configures the log level of gunicorn.
-
-        Acceptable values are: "info", "debug", "warning", "error" and "critical"
-      default: "info"
-      type: string
+peers:
+  storage-peers:
+    interface: storage_peers
 
 requires:
   fs-share:
     interface: fs_share
+  juju-info:
+    interface: juju-info
+    scope: container
+
+config:
+  options:
+    mountinfo:
+      default: "{}"
+      type: string
+      description: |
+        Information to mount the filesystem on the machine. This is specified as a JSON object string.
+        Example usage:
+          ```bash
+          $ juju config slurmd mountpoints=<<EOF
+            {
+              "cephfs": {
+                "mountpoint": "/scratch",
+                "noexec": true
+              },
+              "nfs": {
+                "mountpoint": "/data",
+                "nosuid": true,
+                "nodev": true,
+                "read-only": true,
+              }
+            }
+          EOF
+          ```

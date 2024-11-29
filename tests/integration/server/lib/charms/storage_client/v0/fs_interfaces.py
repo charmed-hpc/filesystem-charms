@@ -71,11 +71,11 @@ def _parse_uri(uri: str) -> _UriData:
     _logger.debug(f"parsing `{uri}`")
 
     uri = urlparse(uri, allow_fragments=False)
-    scheme = str(uri.scheme) if uri.scheme else ""
+    scheme = str(uri.scheme)
     if not scheme:
         raise ParseError("scheme cannot be empty")
-    user = unquote(uri.username) if uri.username else ""
-    hostname = unquote(uri.hostname) if uri.hostname else ""
+    user = unquote(uri.username)
+    hostname = unquote(uri.hostname)
 
     if not hostname or hostname[0] != '(' or hostname[-1] != ')':
         _logger.debug(f"parsing failed for hostname `{hostname}`")
@@ -84,11 +84,11 @@ def _parse_uri(uri: str) -> _UriData:
     hosts = hostname.split(',')
     if len(hosts) == 0:
         raise ParseError("list of hosts cannot be empty")
-    path = uri.path or ""
+    path = uri.path
     if not path:
         raise ParseError("path cannot be empty")
     try:
-        options = parse_qs(uri.query, strict_parsing=True) if uri.query else {}
+        options = parse_qs(uri.query, strict_parsing=True)
     except ValueError:
         _logger.debug(f"parsing failed for query `{uri.query}`")
         raise ParseError("invalid options for endpoint info")
