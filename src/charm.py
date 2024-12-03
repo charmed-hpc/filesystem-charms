@@ -79,7 +79,6 @@ class StorageClientCharm(ops.CharmBase):
             active_filesystems.add(fs_type)
 
         with self.mounts() as mounts:
-
             # Cleanup and unmount all the mounts that are not available.
             for fs_type in list(mounts.keys()):
                 if fs_type not in active_filesystems:

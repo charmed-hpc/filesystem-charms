@@ -64,7 +64,7 @@ class _UriData:
     user: str
     hosts: [str]
     path: str
-    options: Dict[str, str]
+    options: dict[str, str]
 
 
 def _parse_uri(uri: str) -> _UriData:
@@ -86,7 +86,7 @@ def _parse_uri(uri: str) -> _UriData:
         raise ParseError("list of hosts cannot be empty")
     path = uri.path
     if not path:
-        raise ParseError("path cannot be empty")
+        path = "/"
     try:
         options = parse_qs(uri.query, strict_parsing=True)
     except ValueError:
@@ -97,10 +97,15 @@ def _parse_uri(uri: str) -> _UriData:
 
 
 def _to_uri(scheme: str, hosts: [str], path: str, user="", options: Dict[str, str] = {}) -> str:
+    if not scheme:
+        raise FsInterfacesError("scheme cannot be empty")
+    if len(hosts) == 0:
+        raise FsInterfacesError("list of hosts cannot be empty")
     user = quote(user)
     hostname = quote(",".join(hosts))
     netloc = f"{user}@" if user else "" + f"({hostname})"
     query = urlencode(options)
+    path = path if path else "/"
 
     return urlunsplit((scheme, netloc, path, query, None))
 
@@ -159,6 +164,10 @@ class ShareInfo(ABC):
     @abstractmethod
     def to_uri(self, model: Model) -> str: ...
 
+    @abstractmethod
+    def grant(self, model: Model, relation: ops.Relation):
+        pass
+
     @classmethod
     @abstractmethod
     def fs_type(cls) -> str: ...
@@ -174,10 +183,12 @@ class NfsInfo(ShareInfo):
     def from_uri(cls, uri: str, _model: Model) -> "NfsInfo":
         info = _parse_uri(uri)
 
-        if info.scheme != "nfs":
+        if info.scheme != cls.fs_type():
             raise ParseError(
                 "could not parse `EndpointInfo` with incompatible scheme into `NfsInfo`"
             )
+        
+        path = info.path
 
         if info.user:
             _logger.warning("ignoring user info on nfs endpoint info")
@@ -189,7 +200,6 @@ class NfsInfo(ShareInfo):
             _logger.warning("ignoring endpoint options on nfs endpoint info")
 
         hostname, port = _hostinfo(info.hosts[0])
-        path = info.path
         return NfsInfo(hostname=hostname, port=port, path=path)
 
     def to_uri(self, _model: Model) -> str:
@@ -201,17 +211,115 @@ class NfsInfo(ShareInfo):
 
         hosts = [host + f":{self.port}" if self.port else ""]
 
-        return _to_uri(scheme="nfs", hosts=hosts, path=self.path)
+        return _to_uri(scheme=self.fs_type(), hosts=hosts, path=self.path)
 
     @classmethod
     def fs_type(cls) -> str:
         return "nfs"
+
+@dataclass(frozen=True)
+class CephfsInfo(ShareInfo):
+    fsid: str
+    name: str
+    path: str
+    monitor_hosts: [str]
+    user: str
+    key: str
+
+    @classmethod
+    def from_uri(cls, uri: str, model: Model) -> "CephfsInfo":
+        info = _parse_uri(uri)
+
+        if info.scheme != cls.fs_type():
+            raise ParseError(
+                "could not parse `EndpointInfo` with incompatible scheme into `CephfsInfo`"
+            )
+
+        path = info.path
+        
+        if not (user := info.user):
+            raise ParseError(
+                "missing user in uri for `CephfsInfo" 
+            )
+        
+        if not (name := info.options.get("name")):
+            raise ParseError(
+                "missing name in uri for `CephfsInfo`"
+            )
+        
+        if not (fsid := info.options.get("fsid")):
+            raise ParseError(
+                "missing fsid in uri for `CephfsInfo`"
+            )
+        
+        monitor_hosts = info.hosts
+
+        if not (auth := info.options.get("auth")):
+            raise ParseError(
+                "missing auth info in uri for `CephsInfo`"
+            )
+
+        try:
+            kind, data = auth.split(":", 1)
+        except ValueError:
+            raise ParseError("Could not get the kind of auth info")
+        
+        if kind == "secret":
+            key = model.get_secret(id=auth).get_content(refresh=True)["key"]
+        elif kind == "plain":
+            key = data
+        else:
+            raise ParseError("Invalid kind for auth info")
+        
+        return CephfsInfo(fsid=fsid, name=name, path=path, monitor_hosts=monitor_hosts, user=user, key=key)
+
+    def to_uri(self, model: Model) -> str:
+        scheme = self.fs_type()
+        hosts = self.monitor_hosts
+        path = self.path
+        user = self.user
+
+        secret = self._get_or_create_auth_secret(model)
+
+        options = {
+            "fsid": self.fsid,
+            "name": self.name,
+            "auth": secret.id,
+            "auth-rev": str(secret.get_info().revision),
+        }
+
+
+        return _to_uri(scheme=scheme, hosts=hosts, path=self.path)
+    
+    @abstractmethod
+    def grant(self, model: Model, relation: Relation):
+        self._get_or_create_auth_secret(model)
+
+        secret.grant(relation)
+
+    @classmethod
+    def fs_type(cls) -> str:
+        return "cephfs"
+    
+    def _get_or_create_auth_secret(self, model: Model) -> ops.Secret:
+        try:
+            secret = model.get_secret(label="auth")
+            secret.set_content({"key": self.key})
+        except ops.SecretNotFoundError:
+            secret = model.app.add_secret(
+                self.key,
+                label="auth",
+                description="Cephx key to authenticate against the CephFS share"
+            )
+        return secret
 
 
 def _uri_to_share_info(uri: str, model: Model) -> ShareInfo:
     match uri.split("://", maxsplit=1)[0]:
         case "nfs":
             return NfsInfo.from_uri(uri, model)
+        case "cephfs":
+            return CephfsInfo.from_uri(uri, model)
         case _:
             raise FsInterfacesError("unsupported share type")
 
@@ -321,16 +429,20 @@ class FSProvides(_BaseInterface):
         if not self.unit.is_leader():
             return
 
-        uri = share_info.to_uri(self.charm.model)
+        uri = share_info.to_uri(self.model)
 
         self._endpoint = uri
 
         for relation in self.relations:
+            share_info.grant(self.model, relation)
             relation.data[self.app]["endpoint"] = uri
 
     def _update_relation(self, event: RelationJoinedEvent) -> None:
-        if not (endpoint := self._endpoint):
+        if not self.unit.is_leader() or not (endpoint := self._endpoint):
             return
+
+        share_info = _uri_to_share_info(endpoint, self.model)
+        share_info.grant(self.model, event.relation)
 
         event.relation.data[self.app]["endpoint"] = endpoint
 
