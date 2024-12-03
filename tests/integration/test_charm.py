@@ -29,8 +29,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
     # Deploy the charm and wait for active/idle status
     await asyncio.gather(
         ops_test.model.deploy("ubuntu", application_name="ubuntu"),
-        ops_test.model.deploy(charm, application_name=APP_NAME, num_units=0, config={
-            "mountinfo": """
+        ops_test.model.deploy(
+            charm,
+            application_name=APP_NAME,
+            num_units=0,
+            config={
+                "mountinfo": """
             {
                 "nfs": {
                     "mountpoint": "/data",
@@ -39,7 +43,8 @@ async def test_build_and_deploy(ops_test: OpsTest):
                 }
             }
             """
-        }),
+            },
+        ),
         ops_test.model.deploy(server, application_name="server"),
         ops_test.model.wait_for_idle(
             apps=["server", "ubuntu"], status="active", raise_on_blocked=True, timeout=1000
@@ -49,4 +54,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.integrate(f"{APP_NAME}:juju-info", "ubuntu:juju-info")
     await ops_test.model.integrate(f"{APP_NAME}:fs-share", "server:fs-share")
 
-    await ops_test.model.wait_for_idle(apps=[APP_NAME, "ubuntu", "server"], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, "ubuntu", "server"], status="active", timeout=1000
+    )

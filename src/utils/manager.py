@@ -10,12 +10,11 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
-from typing import Iterator, List, Optional, Tuple, Union
-from urllib.parse import urlsplit
+from typing import Iterator, List, Optional, Union
 
-from charms.storage_client.v0.fs_interfaces import ShareInfo, NfsInfo
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
+from charms.storage_client.v0.fs_interfaces import NfsInfo, ShareInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -53,14 +52,20 @@ class MountInfo:
     freq: str
     passno: str
 
+
 class MountManager:
-    def __init__(self) -> None:
-        self._packages = [apt.DebianPackage.from_system(pkg) for pkg in ["ceph-common", "nfs-common", "autofs"]]
-    
+    @property
+    def _packages(self) -> List[apt.DebianPackage]:
+        if not self._pkgs:
+            self._pkgs = [
+                apt.DebianPackage.from_system(pkg)
+                for pkg in ["ceph-common", "nfs-common", "autofs"]
+            ]
+        return self._pkgs
+
     @property
     def installed(self) -> bool:
-        """Check if the required packages are installed.
-        """
+        """Check if the required packages are installed."""
         for pkg in self._packages:
             if not pkg.present:
                 return False
@@ -76,7 +81,9 @@ class MountManager:
             for pkg in self._packages:
                 pkg.ensure(state)
         except (apt.PackageError, apt.PackageNotFoundError) as e:
-            _logger.error(f"failed to change the state of the required packages. Reason:\n{e.message}")
+            _logger.error(
+                f"failed to change the state of the required packages. Reason:\n{e.message}"
+            )
             raise Error(e.message)
 
     def supported(self) -> bool:
@@ -123,15 +130,13 @@ class MountManager:
 
         return list(_mounts("autofs"))
 
-
     def mounted(self, target: str) -> bool:
-        """Determine if mountpoint or endpoint is mounted.
+        """Determine if mountpoint is mounted.
 
         Args:
-            target: share endpoint or mountpoint to check.
+            target: share mountpoint to check.
         """
-        return fetch(target) is not None
-
+        return self.fetch(target) is not None
 
     def mount(
         self,
@@ -164,7 +169,9 @@ class MountManager:
 
         _logger.debug(f"Mounting share {endpoint} at {target}")
         autofs_id = _mountpoint_to_autofs_id(target)
-        pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(f"/- /etc/auto.{autofs_id}")
+        pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(
+            f"/- /etc/auto.{autofs_id}"
+        )
         pathlib.Path(f"/etc/auto.{autofs_id}").write_text(
             f"{target} -{','.join(options)} {endpoint}"
         )
@@ -173,10 +180,9 @@ class MountManager:
             systemd.service_reload("autofs", restart_on_failure=True)
         except systemd.SystemdError as e:
             _logger.error(f"Failed to mount {endpoint} at {target}. Reason:\n{e}")
-            if "Operation not permitted" in str(e) and not supported():
+            if "Operation not permitted" in str(e) and not self.supported():
                 raise Error("Mounting shares not supported on LXD containers")
             raise Error(f"Failed to mount {endpoint} at {target}")
-
 
     def umount(self, mountpoint: Union[str, os.PathLike]) -> None:
         """Unmount a share.
@@ -228,7 +234,7 @@ def _mountpoint_to_autofs_id(mountpoint: Union[str, os.PathLike]) -> str:
 
 
 def _mounts(fstype: str = "") -> Iterator[MountInfo]:
-    """Gets an iterator of all mounts in the system that have the requested fstype.
+    """Get an iterator of all mounts in the system that have the requested fstype.
 
     Returns:
         Iterator[MountInfo]: All the mounts with a valid fstype.
@@ -242,6 +248,7 @@ def _mounts(fstype: str = "") -> Iterator[MountInfo]:
                 continue
 
             yield m
+
 
 def _get_endpoint_and_opts(info: ShareInfo) -> tuple[str, [str]]:
     match info:
