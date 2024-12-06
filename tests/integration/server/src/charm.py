@@ -7,7 +7,7 @@
 import logging
 
 import ops
-from charms.storage_client.v0.fs_interfaces import FSProvides, NfsInfo
+from charms.storage_client.v0.fs_interfaces import FsProvides, NfsInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -15,12 +15,12 @@ _logger = logging.getLogger(__name__)
 class StorageServerCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
-        self._fs_share = FSProvides(self, "fs-share", "server-peers")
+        self._fs_share = FsProvides(self, "fs-share", "server-peers")
         framework.observe(self.on.start, self._on_start)
 
     def _on_start(self, event: ops.StartEvent):
         """Handle start event."""
-        self._fs_share.set_share(NfsInfo("192.168.1.254", 65535, "/srv"))
+        self._fs_share.set_fs_info(NfsInfo("192.168.1.254", 65535, "/srv"))
         self.unit.status = ops.ActiveStatus()
 
 

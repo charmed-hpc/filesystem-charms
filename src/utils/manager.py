@@ -14,7 +14,7 @@ from typing import Iterator, List, Optional, Union
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
-from charms.storage_client.v0.fs_interfaces import NfsInfo, ShareInfo
+from charms.storage_client.v0.fs_interfaces import NfsInfo, FsInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class MountManager:
 
     def mount(
         self,
-        share_info: ShareInfo,
+        share_info: FsInfo,
         mountpoint: Union[str, os.PathLike],
         options: Optional[List[str]] = None,
     ) -> None:
@@ -250,7 +250,7 @@ def _mounts(fstype: str = "") -> Iterator[MountInfo]:
             yield m
 
 
-def _get_endpoint_and_opts(info: ShareInfo) -> tuple[str, [str]]:
+def _get_endpoint_and_opts(info: FsInfo) -> tuple[str, [str]]:
     match info:
         case NfsInfo(hostname=hostname, port=port, path=path):
             try:

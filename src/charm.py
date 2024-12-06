@@ -12,7 +12,7 @@ from typing import Any, Optional, Generator
 
 import charms.operator_libs_linux.v0.apt as apt
 import ops
-from charms.storage_client.v0.fs_interfaces import FSRequires, Share
+from charms.storage_client.v0.fs_interfaces import FsRequires, Endpoint
 from jsonschema import ValidationError, validate
 
 from utils.manager import MountManager
@@ -43,7 +43,7 @@ class StorageClientCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
 
-        self._fs_share = FSRequires(self, "fs-share")
+        self._fs_share = FsRequires(self, "fs-share")
         self._mount_manager = MountManager()
         framework.observe(self.on.upgrade_charm, self._handle_event)
         framework.observe(self.on.update_status, self._handle_event)
@@ -70,9 +70,9 @@ class StorageClientCharm(ops.CharmBase):
             )
             return
 
-        shares = self._fs_share.shares
+        shares = self._fs_share.endpoints
         active_filesystems = set()
-        for fs_type, count in Counter([share.info.fs_type() for share in shares]).items():
+        for fs_type, count in Counter([share.fs_info.scheme() for share in shares]).items():
             if count > 1:
                 self.app.status = ops.BlockedStatus(f"Too many relations for mount type `{fs_type}`.")
                 return
@@ -86,7 +86,7 @@ class StorageClientCharm(ops.CharmBase):
                     del mounts[fs_type]
 
             for share in shares:
-                fs_type = share.info.fs_type()
+                fs_type = share.fs_info.scheme()
                 if not (options := config.get(fs_type)):
                     self.app.status = ops.BlockedStatus(f"Missing configuration for mount type `{fs_type}.")
                     return
@@ -104,7 +104,7 @@ class StorageClientCharm(ops.CharmBase):
                 self.unit.status = ops.MaintenanceStatus(f"Mounting `{mountpoint}`")
 
                 if not (mount := mounts.get(fs_type)) or mount != options:
-                    # Just in case, unmount the previously mounted  
+                    # Just in case, unmount the previously mounted share
                     if mount:
                         self._mount_manager.umount(mount["mountpoint"])
                     self._mount_manager.mount(share, mountpoint, options=opts)
