@@ -14,7 +14,7 @@ from typing import Iterator, List, Optional, Union
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
-from charms.storage_client.v0.fs_interfaces import NfsInfo, FsInfo
+from charms.filesystem_client.v0.interfaces import CephfsInfo, FsInfo, NfsInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class Error(Exception):
         return self.args[0]
 
     def __repr__(self):
-        """String representation of the error."""
+        """Return the string representation of the error."""
         return f"<{type(self).__module__}.{type(self).__name__} {self.args}>"
 
 
@@ -53,7 +53,13 @@ class MountInfo:
     passno: str
 
 
-class MountManager:
+class MountsManager:
+    """Manager for mounted filesystems in the current system."""
+
+    def __init__(self):
+        # Lazily initialized
+        self._pkgs = None
+
     @property
     def _packages(self) -> List[apt.DebianPackage]:
         if not self._pkgs:
@@ -262,7 +268,17 @@ def _get_endpoint_and_opts(info: FsInfo) -> tuple[str, [str]]:
 
             endpoint = f"{hostname}:{path}"
             options = [f"port={port}"] if port else []
-
-            return endpoint, options
+        case CephfsInfo(
+            fsid=fsid, name=name, path=path, monitor_hosts=mons, user=user, key=secret
+        ):
+            mon_addr = "/".join(mons)
+            endpoint = f"{user}@{fsid}.{name}={path}"
+            options = [
+                "fstype=ceph",
+                f"mon_addr={mon_addr}",
+                f"secret={secret}",
+            ]
         case _:
-            raise Error("unsupported filesystem type")
+            raise Error(f"unsupported filesystem type `{info.fs_type()}`")
+
+    return endpoint, options

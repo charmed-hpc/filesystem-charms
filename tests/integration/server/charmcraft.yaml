@@ -1,21 +1,20 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
-name: storage-server
+name: filesystem-server
 type: charm
 
-title: Storage server
+title: Filesystem server
 
-summary: Storage server
+summary: Filesystem server
 
-description: Storage server
+description: Filesystem server
 
-bases:
-  - build-on:
-      - name: ubuntu
-        channel: "22.04"
-    run-on:
-      - name: ubuntu
-        channel: "22.04"
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm: {}
 
 peers:
   server-peers:
@@ -25,3 +24,8 @@ provides:
   fs-share:
     interface: fs_share
     limit: 1
+
+config:
+  options:
+    type:
+      type: string

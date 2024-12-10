@@ -4,7 +4,8 @@ version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
     "ops ~= 2.8",
-    "jsonschema ~= 4.23.0" 
+    "jsonschema ~= 4.23.0",
+    "rpds_py ~= 0.22.3"
 ]
 
 [project.optional-dependencies]
@@ -16,6 +17,7 @@ dev = [
 
   # Unit
   "pytest",
+  "pytest-order",
   "coverage[toml]",
   "ops[testing]",
 

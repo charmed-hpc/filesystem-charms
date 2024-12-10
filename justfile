@@ -13,33 +13,37 @@ export PYTHONBREAKPOINT := "pdb.set_trace"
 
 uv_run := "uv run --frozen --extra dev"
 
+# Regenerate uv.lock
+lock:
+    uv lock --no-cache
+
 # Upgrade uv.lock with the latest deps
 upgrade:
     uv lock --upgrade --no-cache
 
 # Generate requirements.txt from pyproject.toml
-requirements:
+requirements: lock
     uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
 
 # Apply coding style standards to code
-fmt:
+fmt: lock
     echo {{PYTHONPATH}}
     {{uv_run}} ruff format {{all}}
     {{uv_run}} ruff check --fix {{all}}
 
 # Check code against coding style standards
-lint:
+lint: lock
     {{uv_run}} codespell {{lib}}
     {{uv_run}} codespell {{project_dir}}
     {{uv_run}} ruff check {{all}}
     {{uv_run}} ruff format --check --diff {{all}}
 
 # Run static type checks
-static *args:
+static *args: lock
     {{uv_run}} pyright {{args}}
 
 # Run unit tests
-unit *args:
+unit *args: lock
     {{uv_run}} coverage run \
         --source={{src}} \
         --source={{lib}} \
@@ -52,7 +56,7 @@ unit *args:
     {{uv_run}} coverage report
 
 # Run integration tests
-integration *args:
+integration *args: lock
     {{uv_run}} pytest \
         -v \
         -s \
