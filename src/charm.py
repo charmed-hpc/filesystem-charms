@@ -129,7 +129,7 @@ class FilesystemClientCharm(ops.CharmBase):
                     self.app.status = ops.BlockedStatus(
                         f"Missing configuration for mount type `{fs_type}."
                     )
-                    return
+                    raise StopCharmError()
 
                 options["uri"] = share.uri
 
