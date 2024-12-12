@@ -39,7 +39,7 @@ lint: lock
     {{uv_run}} ruff format --check --diff {{all}}
 
 # Run static type checks
-static *args: lock
+type *args: lock
     {{uv_run}} pyright {{args}}
 
 # Run unit tests

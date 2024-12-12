@@ -6,6 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+import juju
 import pytest
 import yaml
 from charms.filesystem_client.v0.interfaces import CephfsInfo, NfsInfo
@@ -44,7 +45,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Deploy the charm and wait for active/idle status
     await asyncio.gather(
-        ops_test.model.deploy("ubuntu", application_name="ubuntu", base="ubuntu@24.04"),
+        ops_test.model.deploy(
+            "ubuntu",
+            application_name="ubuntu",
+            base="ubuntu@24.04",
+            constraints=juju.constraints.parse("virt-type=virtual-machine"),
+        ),
         ops_test.model.deploy(
             charm,
             application_name=APP_NAME,
