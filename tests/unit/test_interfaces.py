@@ -29,7 +29,7 @@ KEY = "R//appdqz4NP4Bxcc5XWrg=="
 
 
 class FsClientCharm(CharmBase):
-    """Mock CephFS client charm for unit tests."""
+    """Mock FS client charm for unit tests."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
