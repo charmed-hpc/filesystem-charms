@@ -8,9 +8,9 @@ import logging
 import os
 import pathlib
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
-from typing import Generator, List, Optional, Union
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
@@ -24,16 +24,16 @@ class Error(Exception):
     """Raise if Storage client manager encounters an error."""
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Get a string representation of the error plus class name."""
         return f"<{type(self).__module__}.{type(self).__name__}>"
 
     @property
-    def message(self):
+    def message(self) -> str:
         """Return the message passed as an argument."""
         return self.args[0]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return the string representation of the error."""
         return f"<{type(self).__module__}.{type(self).__name__} {self.args}>"
 
@@ -63,16 +63,14 @@ class _MountInfo:
 class Mounts:
     """Collection of mounts that need to be managed by the `MountsManager`."""
 
-    _mounts: dict[str, _MountInfo]
-
-    def __init__(self):
-        self._mounts = {}
+    def __init__(self) -> None:
+        self._mounts: dict[str, _MountInfo] = {}
 
     def add(
         self,
         info: FilesystemInfo,
-        mountpoint: Union[str, os.PathLike],
-        options: Optional[List[str]] = None,
+        mountpoint: str | os.PathLike,
+        options: list[str] | None = None,
     ) -> None:
         """Add a mount to the list of managed mounts.
 
@@ -96,14 +94,14 @@ class Mounts:
 class MountsManager:
     """Manager for mounted filesystems in the current system."""
 
-    def __init__(self, charm: ops.CharmBase):
+    def __init__(self, charm: ops.CharmBase) -> None:
         # Lazily initialized
         self._pkgs = None
         self._master_file = pathlib.Path(f"/etc/auto.master.d/{charm.app.name}.autofs")
         self._autofs_file = pathlib.Path(f"/etc/auto.{charm.app.name}")
 
     @property
-    def _packages(self) -> List[apt.DebianPackage]:
+    def _packages(self) -> list[apt.DebianPackage]:
         """List of packages required by the client."""
         if not self._pkgs:
             self._pkgs = [
@@ -119,12 +117,12 @@ class MountsManager:
             if not pkg.present:
                 return False
 
-        if not self._master_file.exists or not self._autofs_file.exists:
+        if not self._master_file.exists() or not self._autofs_file.exists():
             return False
 
         return True
 
-    def install(self):
+    def install(self) -> None:
         """Install the required mount packages.
 
         Raises:
@@ -134,9 +132,7 @@ class MountsManager:
             for pkg in self._packages:
                 pkg.ensure(apt.PackageState.Present)
         except (apt.PackageError, apt.PackageNotFoundError) as e:
-            _logger.error(
-                f"failed to change the state of the required packages. reason:\n{e.message}"
-            )
+            _logger.error("failed to change the state of the required packages", exc_info=e)
             raise Error(e.message)
 
         try:
@@ -144,7 +140,7 @@ class MountsManager:
             self._autofs_file.touch(mode=0o600)
             self._master_file.write_text(f"/- {self._autofs_file}")
         except IOError as e:
-            _logger.error(f"failed to create the required autofs files. reason:\n{e}")
+            _logger.error("failed to create the required autofs files", exc_info=e)
             raise Error("failed to create the required autofs files")
 
     def supported(self) -> bool:
@@ -159,11 +155,11 @@ class MountsManager:
             else:
                 return True
         except subprocess.CalledProcessError:
-            _logger.warning("Could not detect execution in virtualized environment")
+            _logger.warning("could not detect execution in virtualized environment")
             return True
 
     @contextlib.contextmanager
-    def mounts(self, force_mount=False) -> Generator[Mounts, None, None]:
+    def mounts(self, force_mount=False) -> Iterable[Mounts]:
         """Get the list of `Mounts` that need to be managed by the `MountsManager`.
 
         It will initially contain no mounts, and any mount that is added to
@@ -195,9 +191,7 @@ class MountsManager:
             self._autofs_file.write_text(new_autofs)
             systemd.service_reload("autofs", restart_on_failure=True)
         except systemd.SystemdError as e:
-            _logger.error(f"failed to mount filesystems. reason:\n{e}")
-            if "Operation not permitted" in str(e) and not self.supported():
-                raise Error("mounting shares not supported on LXD containers")
+            _logger.error("failed to mount filesystems", exc_info=e)
             raise Error("failed to mount filesystems")
 
 
