@@ -100,7 +100,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
-from typing import List, Optional, TypeVar, Self
+from typing import List, Optional, TypeVar
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlunsplit
 
 import ops
@@ -354,9 +354,7 @@ class NfsInfo(FilesystemInfo):
         info = _UriData.from_uri(uri)
 
         if info.scheme != cls.filesystem_type():
-            raise ParseUriError(
-                "could not parse uri with incompatible scheme into `NfsInfo`"
-            )
+            raise ParseUriError("could not parse uri with incompatible scheme into `NfsInfo`")
 
         path = info.path
 
@@ -582,16 +580,14 @@ class FilesystemRequires(_BaseInterface):
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
-        self.framework.observe(
-            charm.on[relation_name].relation_departed, self._on_relation_departed
-        )
+        self.framework.observe(charm.on[relation_name].relation_broken, self._on_relation_broken)
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle when the databag between client and server has been updated."""
         _logger.debug("emitting `MountFilesystem` event from `RelationChanged` hook")
         self.on.mount_filesystem.emit(event.relation, app=event.app, unit=event.unit)
 
-    def _on_relation_departed(self, event: RelationDepartedEvent) -> None:
+    def _on_relation_broken(self, event: RelationDepartedEvent) -> None:
         """Handle when server departs integration."""
         _logger.debug("emitting `UmountFilesystem` event from `RelationDeparted` hook")
         self.on.umount_filesystem.emit(event.relation, app=event.app, unit=event.unit)
