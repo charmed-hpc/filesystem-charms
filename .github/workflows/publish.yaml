@@ -1,0 +1,36 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE for licensing details.
+
+name: Release to latest/edge
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci-tests:
+    uses: ./.github/workflows/ci.yaml
+
+  release-to-charmhub:
+    name: Release filesystem-client to Charmhub
+    needs:
+      - ci-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Select charmhub channel
+        uses: canonical/charming-actions/channel@2.6.3
+        id: channel
+      - name: Release updated libraries to Charmhub
+        uses: canonical/charming-actions/release-libraries@2.6.3
+        with:
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Upload charm to Charmhub
+        uses: canonical/charming-actions/upload-charm@2.6.3
+        with:
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          channel: "${{ steps.channel.outputs.name }}"

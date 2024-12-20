@@ -131,7 +131,7 @@ __all__ = [
 ]
 
 # The unique Charmhub library identifier, never change it
-LIBID = "todo"
+LIBID = "7e11f60a31a441aaa70ada2f41c75580"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
