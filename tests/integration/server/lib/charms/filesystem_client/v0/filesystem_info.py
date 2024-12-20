@@ -138,7 +138,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 _logger = logging.getLogger(__name__)
 
@@ -217,17 +217,15 @@ class _UriData:
     ) -> None:
         if not scheme:
             raise FilesystemInfoError("scheme cannot be empty")
-        if len(hosts) == 0:
+        if not hosts:
             raise FilesystemInfoError("list of hosts cannot be empty")
+        path = path or "/"
 
-        # Strictly convert to the required types to avoid passing through weird data.
-        object.__setattr__(self, "scheme", str(scheme))
-        object.__setattr__(self, "hosts", [str(host) for host in hosts])
-        object.__setattr__(self, "user", str(user) if user else "")
-        object.__setattr__(self, "path", str(path) if path else "/")
-        object.__setattr__(
-            self, "options", {str(k): str(v) for k, v in options.items()} if options else {}
-        )
+        object.__setattr__(self, "scheme", scheme)
+        object.__setattr__(self, "hosts", hosts)
+        object.__setattr__(self, "user", user)
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "options", options)
 
     @classmethod
     def from_uri(cls, uri: str) -> "_UriData":
@@ -245,10 +243,14 @@ class _UriData:
         hosts = hostname[1:-1].split(",")
         path = unquote(result.path or "")
         try:
-            options = {
-                key: ",".join(values)
-                for key, values in parse_qs(result.query, strict_parsing=True).items()
-            }
+            options = (
+                {
+                    key: ",".join(values)
+                    for key, values in parse_qs(result.query, strict_parsing=True).items()
+                }
+                if result.query
+                else {}
+            )
         except ValueError:
             raise ParseUriError(f"invalid options for endpoint `{uri}`")
         try:
@@ -378,7 +380,7 @@ class NfsInfo(FilesystemInfo):
         except AddressValueError:
             host = self.hostname
 
-        hosts = [host + f":{self.port}" if self.port else ""]
+        hosts = [f"{host}:{self.port}" if self.port else host]
 
         return str(_UriData(scheme=self.filesystem_type(), hosts=hosts, path=self.path))
 
