@@ -26,6 +26,8 @@ parts:
       - astral-uv
     charm-requirements: ["requirements.txt"]
     override-build: |
+      # hack to get around a weird incompatibility between destructive and non-destructive mode
+      cp $CRAFT_PROJECT_DIR/charmcraft.yaml $CRAFT_PART_BUILD/charmcraft.yaml
       just requirements
       charmcraft fetch-libs
       craftctl default
