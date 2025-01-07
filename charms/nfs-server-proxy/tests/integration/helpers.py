@@ -24,11 +24,11 @@ def modify_default_profile() -> None:
     default.save()
 
 
-def bootstrap_nfs_server() -> str:
+def bootstrap_nfs_server() -> tuple[str, str]:
     """Bootstrap a minimal NFS kernel server in LXD.
 
     Returns:
-        str: NFS URL endpoint.
+        tuple[str, str]: NFS hostname, NFS path.
     """
     client = Client()
 
@@ -36,9 +36,8 @@ def bootstrap_nfs_server() -> str:
         _logger.info("NFS server already exists")
         instance = client.instances.get("nfs-server")
         address = instance.state().network["eth0"]["addresses"][0]["address"]
-        endpoint = f"nfs://{address}/data"
-        _logger.info(f"NFS share endpoint is {endpoint}")
-        return endpoint
+        _logger.info(f"NFS share endpoint is nfs://{address}/data")
+        return address, "/data"
 
     _logger.info("Bootstrapping minimal NFS kernel server")
     config = {
@@ -81,6 +80,5 @@ def bootstrap_nfs_server() -> str:
     for i in ["1", "2", "3"]:
         instance.execute(["touch", f"/data/test-{i}"])
     address = instance.state().network["eth0"]["addresses"][0]["address"]
-    endpoint = f"nfs://{address}/data"
-    _logger.info(f"NFS share endpoint is {endpoint}")
-    return endpoint
+    _logger.info(f"NFS share endpoint is nfs://{address}/data")
+    return address, "/data"

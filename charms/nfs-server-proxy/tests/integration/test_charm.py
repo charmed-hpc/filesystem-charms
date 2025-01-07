@@ -7,6 +7,7 @@ import logging
 import pathlib
 from typing import Any, Coroutine
 
+import juju
 import pytest
 import tenacity
 from helpers import bootstrap_nfs_server, modify_default_profile
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 BASES = ["ubuntu@22.04"]
 BASE = "ubuntu"
-NFS_CLIENT = "nfs-client"
+CLIENT = "filesystem-client"
 NFS_SERVER_PROXY = "nfs-server-proxy"
 
 
@@ -27,16 +28,16 @@ NFS_SERVER_PROXY = "nfs-server-proxy"
 async def test_build_and_deploy(
     ops_test: OpsTest, nfs_server_proxy_charm: Coroutine[Any, Any, pathlib.Path], base
 ) -> None:
-    """Test that nfs-server-proxy can stabilize against nfs-client."""
+    """Test that nfs-server-proxy can stabilize against filesystem-client."""
     charm = str(await nfs_server_proxy_charm)
     modify_default_profile()
-    endpoint = bootstrap_nfs_server()
-    logger.info(f"Deploying{ NFS_SERVER_PROXY} against {NFS_CLIENT} and {BASE}")
+    hostname, path = bootstrap_nfs_server()
+    logger.info(f"Deploying {NFS_SERVER_PROXY} against {CLIENT} and {BASE}")
     await asyncio.gather(
         ops_test.model.deploy(
             charm,
             application_name=NFS_SERVER_PROXY,
-            config={"endpoint": endpoint},
+            config={"hostname": hostname, "path": path},
             num_units=1,
             base=base,
         ),
@@ -45,24 +46,24 @@ async def test_build_and_deploy(
             application_name=BASE,
             channel="edge",
             num_units=1,
-            base=base,
+            base="ubuntu@24.04",
+            constraints=juju.constraints.parse("virt-type=virtual-machine"),
         ),
         ops_test.model.deploy(
-            NFS_CLIENT,
-            application_name=NFS_CLIENT,
+            CLIENT,
+            application_name=CLIENT,
             channel="edge",
             config={"mountpoint": "/data"},
             num_units=0,
-            base=base,
         ),
     )
     # Set integrations for charmed applications.
-    await ops_test.model.integrate(f"{NFS_CLIENT}:juju-info", f"{BASE}:juju-info")
-    await ops_test.model.integrate(f"{NFS_CLIENT}:nfs-share", f"{NFS_SERVER_PROXY}:nfs-share")
+    await ops_test.model.integrate(f"{CLIENT}:juju-info", f"{BASE}:juju-info")
+    await ops_test.model.integrate(f"{CLIENT}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
-            apps=[NFS_SERVER_PROXY, NFS_CLIENT], status="active", timeout=1000
+            apps=[NFS_SERVER_PROXY, CLIENT], status="active", timeout=1000
         )
         assert ops_test.model.applications[NFS_SERVER_PROXY].units[0].workload_status == "active"
 
