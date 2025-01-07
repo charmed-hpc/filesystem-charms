@@ -5,9 +5,9 @@
 
 import json
 import logging
-from typing import Any, Tuple
+from typing import Any
 
-from charms.storage_libs.v0.cephfs_interfaces import CephFSAuthInfo, CephFSShareInfo
+from charms.filesystem_client.v0.filesystem_info import CephfsInfo
 from pylxd import Client
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -18,7 +18,7 @@ USERNAME = "fs-client"
 PATH = "/"
 
 
-def bootstrap_microceph() -> Tuple[CephFSShareInfo, CephFSAuthInfo]:
+def bootstrap_microceph() -> CephfsInfo:
     """Bootstrap a minimal Microceph cluster in LXD.
 
     Returns: A tuple with the share info and auth info to mount the CephFS share.
@@ -33,7 +33,7 @@ def bootstrap_microceph() -> Tuple[CephFSShareInfo, CephFSAuthInfo]:
     config = {
         "name": "microceph",
         "source": {
-            "alias": "jammy/amd64",
+            "alias": "noble/amd64",
             "mode": "pull",
             "protocol": "simplestreams",
             "server": "https://cloud-images.ubuntu.com/releases",
@@ -51,16 +51,35 @@ def bootstrap_microceph() -> Tuple[CephFSShareInfo, CephFSAuthInfo]:
     _exec_commands(
         instance,
         [
-            ["ln", "-s", "/bin/true", "/usr/local/bin/udevadm"],
-            ["apt-get", "-y", "update"],
-            ["apt-get", "-y", "install", "ceph-common"],
+            ["ln", "-s", "/bin/true"],
+            ["apt", "update", "-y"],
+            ["apt", "upgrade", "-y"],
+            ["apt", "install", "-y", "ceph-common"],
+        ],
+    )
+
+    # Restart in case there was a kernel update.
+    instance.restart(wait=True)
+    _wait_for_microceph(instance)
+
+    _exec_commands(
+        instance,
+        [
             ["snap", "install", "microceph"],
             ["microceph", "cluster", "bootstrap"],
             ["microceph", "disk", "add", "loop,2G,3"],
             ["microceph.ceph", "osd", "pool", "create", f"{FS_NAME}_data"],
             ["microceph.ceph", "osd", "pool", "create", f"{FS_NAME}_metadata"],
             ["microceph.ceph", "fs", "new", FS_NAME, f"{FS_NAME}_metadata", f"{FS_NAME}_data"],
-            ["microceph.ceph", "fs", "authorize", FS_NAME, f"client.{USERNAME}", PATH, "rw"],
+            [
+                "microceph.ceph",
+                "fs",
+                "authorize",
+                FS_NAME,
+                f"client.{USERNAME}",
+                PATH,
+                "rw",
+            ],
             # Need to generate the test files inside microceph itself.
             [
                 "ln",
@@ -89,7 +108,8 @@ def bootstrap_microceph() -> Tuple[CephFSShareInfo, CephFSAuthInfo]:
 @retry(wait=wait_exponential(max=6), stop=stop_after_attempt(10))
 def _wait_for_microceph(instance) -> None:
     # Need to extract this into its own function to apply the tenacity decorator
-    _exec_command(instance, ["echo", "'Hello!'"])
+    _exec_command(instance, ["echo"])
+    _exec_command(instance, ["systemctl", "is-active", "snapd", "--quiet"])
 
 
 @retry(wait=wait_exponential(max=6), stop=stop_after_attempt(10))
@@ -103,14 +123,13 @@ def _mount_cephfs(instance) -> None:
     _exec_command(instance, ["mount", "-t", "ceph", f"admin@.{FS_NAME}={PATH}", "/mnt"])
 
 
-def _get_cephfs_info(instance: Any) -> Tuple[CephFSShareInfo, CephFSAuthInfo]:
+def _get_cephfs_info(instance: Any) -> CephfsInfo:
     status = json.loads(_exec_command(instance, ["microceph.ceph", "-s", "-f", "json"]))
     fsid = status["fsid"]
     host = instance.state().network["enp5s0"]["addresses"][0]["address"] + ":6789"
     key = _exec_command(instance, ["microceph.ceph", "auth", "print-key", f"client.{USERNAME}"])
-    return (
-        CephFSShareInfo(fsid=fsid, name=FS_NAME, path=PATH, monitor_hosts=[host]),
-        CephFSAuthInfo(username=USERNAME, key=key),
+    return CephfsInfo(
+        fsid=fsid, name=FS_NAME, path=PATH, monitor_hosts=[host], user=USERNAME, key=key
     )
 
 

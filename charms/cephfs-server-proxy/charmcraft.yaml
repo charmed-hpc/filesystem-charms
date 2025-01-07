@@ -22,12 +22,12 @@ bases:
       channel: "22.04"
 
 peers:
-  proxy:
-    interface: proxy
+  server-peers:
+    interface: server_peers
 
 provides:
-  cephfs-share:
-    interface: cephfs_share
+  filesystem:
+    interface: filesystem_info
 
 config:
   options:
