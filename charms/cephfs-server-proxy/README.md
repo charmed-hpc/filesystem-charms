@@ -21,7 +21,7 @@ First, launch a virtual machine using [LXD](https://ubuntu.com/lxd):
 ```shell
 $ snap install lxd
 $ lxd init --auto
-$ lxc launch ubuntu:22.04 cephfs-server --vm
+$ lxc launch ubuntu:24.04 cephfs-server --vm
 $ lxc shell cephfs-server
 ```
 
@@ -69,7 +69,7 @@ juju deploy cephfs-server-proxy --channel latest/edge \
   --config sharepoint=cephfs:/ \
   --config monitor-hosts=<HOST> \
   --config auth-info=fs-client:<CLIENT_KEY>
-juju deploy ubuntu --base ubuntu@22.04 --constraints virt-type=virtual-machine
+juju deploy ubuntu --base ubuntu@24.04 --constraints virt-type=virtual-machine
 juju deploy cephfs-client data --channel latest/edge --config mountpoint=/data
 juju integrate data:juju-info ubuntu:juju-info
 juju integrate data:cephfs-share cephfs-server-proxy:cephfs-share

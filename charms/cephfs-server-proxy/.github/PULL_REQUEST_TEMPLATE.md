@@ -9,7 +9,7 @@ motivation and context. Is it a new feature? A bug fix? Does it address an exist
 > * Did you run the defined integration and units under `tests/`?
 > * Did you write new tests? Where are they located in the repository?
 > * Which undercloud did you use to perform the tests? LXD, vSphere, AWS, etc.
-> * What operating system did you test the charms on? Ubuntu 22.04, Ubuntu 20.04, CentOS 7, etc.
+> * What operating system did you test the charms on? Ubuntu 24.04, Ubuntu 20.04, CentOS 7, etc.
 
 ## Related issues and/or tasks
 

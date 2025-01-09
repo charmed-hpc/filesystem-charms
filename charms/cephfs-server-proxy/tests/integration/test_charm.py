@@ -15,7 +15,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-BASES = ["ubuntu@22.04"]
+BASES = ["ubuntu@24.04"]
 CLIENT = "filesystem-client"
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 PROXY = METADATA["name"]
