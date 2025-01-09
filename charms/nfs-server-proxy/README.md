@@ -26,7 +26,7 @@ First, launch a virtual machine using [LXD](https://ubuntu.com/lxd):
 ```shell
 $ snap install lxd
 $ lxd init --auto
-$ lxc launch ubuntu:22.04 nfs-server --vm
+$ lxc launch ubuntu:24.04 nfs-server --vm
 $ lxc shell nfs-server
 ```
 
@@ -61,7 +61,7 @@ Now deploy the NFS server proxy operator with an NFS client operator and princip
 $ juju deploy nfs-server-proxy kernel-server-proxy --config \
     endpoint=<IPv4 address of LXD virtual machine>:/data
 $ juju deploy nfs-client data --config mountpoint=/data
-$ juju deploy ubuntu --base ubuntu@22.04
+$ juju deploy ubuntu --base ubuntu@24.04
 $ juju integrate data:juju-info ubuntu:juju-info
 $ juju integrate data:nfs-share kernel-server-proxy:nfs-share
 ```

@@ -2,9 +2,7 @@
 # See LICENSE file for licensing details.
 
 name: nfs-server-proxy
-
 type: charm
-
 title: NFS Server Proxy
 summary: Charmed NFS server for non-charmed NFS storage appliances.
 description: |
@@ -17,6 +15,17 @@ links:
   issues: 
   - https://github.com/canonical/nfs-server-proxy-operator/issues
 
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm: {}
+
+charm-libs:
+  - lib: filesystem-client.filesystem_info
+    version: "0.2"
+
 peers:
   server-peers:
     interface: server_peers
@@ -24,14 +33,6 @@ peers:
 provides:
   filesystem:
     interface: filesystem_info
-
-bases:
-  - build-on:
-    - name: ubuntu
-      channel: "22.04"
-    run-on:
-    - name: ubuntu
-      channel: "22.04"
 
 config:
   options:

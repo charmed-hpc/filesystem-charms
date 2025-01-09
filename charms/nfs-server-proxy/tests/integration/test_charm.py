@@ -15,7 +15,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-BASES = ["ubuntu@22.04"]
+BASES = ["ubuntu@24.04"]
 BASE = "ubuntu"
 CLIENT = "filesystem-client"
 NFS_SERVER_PROXY = "nfs-server-proxy"
