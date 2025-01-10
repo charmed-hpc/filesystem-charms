@@ -1,0 +1,47 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: nfs-server-proxy
+type: charm
+title: NFS Server Proxy
+summary: Charmed NFS server for non-charmed NFS storage appliances.
+description: |
+  Charmed NFS server for non-charmed NFS storage appliances.
+
+  Enable NFS Client charms to mount non-charmed NFS shares.
+links:
+  source: 
+  - https://github.com/canonical/nfs-server-proxy-operator
+  issues: 
+  - https://github.com/canonical/nfs-server-proxy-operator/issues
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm: {}
+
+charm-libs:
+  - lib: filesystem-client.filesystem_info
+    version: "0.2"
+
+peers:
+  server-peers:
+    interface: server_peers
+
+provides:
+  filesystem:
+    interface: filesystem_info
+
+config:
+  options:
+    hostname:
+      description: Hostname of the NFS server.
+      type: string
+    port:
+      description: Port to access the NFS server.
+      type: int
+    path:
+      description: Exported path of the NFS share.
+      type: string

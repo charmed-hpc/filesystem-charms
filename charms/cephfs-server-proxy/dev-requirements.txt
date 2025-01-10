@@ -1,0 +1,7 @@
+juju ~= 3.3
+pylxd ~= 2.3
+pytest ~= 7.2
+pytest-operator ~= 0.34
+pytest-order ~= 1.1
+tenacity ~= 8.2
+requests ~= 2.31.0 # TODO: track https://github.com/psf/requests/issues/6707
