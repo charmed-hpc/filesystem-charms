@@ -1,15 +1,26 @@
-venv/
-build/
+venv
+build
 *.charm
-.tox/
+.tox
 .coverage
 __pycache__/
 *.py[cod]
 .idea
-.vscode/
+.vscode
+version
+cover
+
+# Managed by repository.py
+.charmhub.secret
+_build
+external
+
+# Managed by Charmcraft
+**/lib/charms/*
+
+# Managed by uv
+.venv
+.ruff_cache
+.pytest_cache
 requirements.txt
-
-# Ignore libs except the filesystem_client
-
-lib/charms/*
-!lib/charms/filesystem_client/
+dev-requirements.txt

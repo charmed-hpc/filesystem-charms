@@ -1,9 +1,9 @@
 [project]
-name = "filesystem-client"
+name = "filesystems"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops ~= 2.8"
+    "ops ~= 2.17"
 ]
 
 [project.optional-dependencies]
@@ -20,10 +20,17 @@ dev = [
   "ops[testing]",
 
   # Integration
-  "juju",
-  "pytest-operator",
+  "juju ~= 3.3",
+  "pylxd ~= 2.3",
+  "pytest ~= 7.2",
+  "pytest-operator ~= 0.34",
+  "pytest-order ~= 1.1",
+  "tenacity ~= 8.2",
+  "requests ~= 2.31.0", # TODO: track https://github.com/psf/requests/issues/6707
 ]
 
+[tool.uv.workspace]
+members = ["charms/*"]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -31,6 +38,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.coverage.paths]
+source = ["charms", "*/_build"]   
 
 [tool.pytest.ini_options]
 minversion = "6.0"

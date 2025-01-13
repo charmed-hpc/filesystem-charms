@@ -100,7 +100,7 @@ def bootstrap_nfs_server() -> NfsInfo:
             ["systemctl", "restart", "nfs-kernel-server"],
         ],
     )
-    for i in ["1", "2", "3"]:
+    for i in [1, 2, 3]:
         _exec_command(instance, ["touch", f"/data/test-{i}"])
     address = instance.state().network["enp5s0"]["addresses"][0]["address"]
     _logger.info(f"NFS share endpoint is nfs://{address}/data")
