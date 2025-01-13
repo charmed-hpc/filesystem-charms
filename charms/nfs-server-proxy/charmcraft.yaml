@@ -22,10 +22,6 @@ platforms:
 parts:
   charm: {}
 
-charm-libs:
-  - lib: filesystem-client.filesystem_info
-    version: "0.2"
-
 peers:
   server-peers:
     interface: server_peers

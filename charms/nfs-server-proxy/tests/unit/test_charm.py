@@ -4,9 +4,8 @@
 
 """Test base charm events such as Install, ConfigChanged, etc."""
 
-from ops import testing
-
 from charm import NFSServerProxyCharm
+from ops import testing
 
 
 def test_config_no_hostname():
@@ -33,6 +32,7 @@ def test_config_no_port():
 
 
 def test_config_full():
+    """Test config-changed handler with full config parameters."""
     context = testing.Context(NFSServerProxyCharm)
     state = testing.State(config={"hostname": "127.0.0.1", "path": "/srv", "port": 1234})
     out = context.run(context.on.config_changed(), state)

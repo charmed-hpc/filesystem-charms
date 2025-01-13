@@ -1,48 +1,10 @@
-# Copyright 2023 Canonical Ltd.
-# See LICENSE file for licensing details.
+[project]
+name = "nfs-server-proxy"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = ["ops"]
 
-# Testing tools configuration
-[tool.coverage.run]
-branch = true
-
-[tool.coverage.report]
-show_missing = true
-
-[tool.pytest.ini_options]
-minversion = "6.0"
-log_cli_level = "INFO"
-
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py38"]
-
-# Linting tools configuration
-[tool.ruff]
-line-length = 99
-extend-exclude = ["__pycache__", "*.egg_info"]
-
-[tool.ruff.lint]
-extend-ignore = [
-    "D203",
-    "D204",
-    "D213",
-    "D215",
-    "D400",
-    "D401",
-    "D404",
-    "D406",
-    "D407",
-    "D408",
-    "D409",
-    "D413",
+[tool.repository]
+internal-libraries = [
+  "charms.filesystem_client.v0.filesystem_info"
 ]
-ignore = ["E501", "D107"]
-select = ["E", "W", "F", "C", "N", "D", "I001"]
-per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
-
-[tool.ruff.lint.mccabe]
-max-complexity = 10
-
-[tool.pyright]
-include = ["src/**.py"]
