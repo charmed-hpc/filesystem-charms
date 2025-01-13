@@ -8,6 +8,7 @@ import logging
 from typing import cast
 
 import ops
+
 from charms.filesystem_client.v0.filesystem_info import CephfsInfo, FilesystemProvides
 
 logger = logging.getLogger(__name__)

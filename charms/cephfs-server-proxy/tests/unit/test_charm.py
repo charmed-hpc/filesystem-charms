@@ -3,9 +3,8 @@
 # See LICENSE file for licensing details.
 """Test base charm events such as Install, ConfigChanged, etc."""
 
-from ops import testing
-
 from charm import CephFSServerProxyCharm
+from ops import testing
 
 
 def test_config_missing_all():
@@ -63,6 +62,7 @@ def test_config_invalid_auth_info():
 
 
 def test_config_full():
+    """Test config-changed handler with full config parameters."""
     context = testing.Context(CephFSServerProxyCharm)
     state = testing.State(
         config={
