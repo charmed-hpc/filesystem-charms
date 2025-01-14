@@ -1,5 +1,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 name: cephfs-server-proxy
 type: charm
 title: CephFS Proxy
@@ -10,9 +11,9 @@ description: |
   Enable CephFS Client charms to mount non-charmed Ceph shares.
 links:
   source: 
-  - https://github.com/canonical/cephfs-server-proxy-operator
+  - https://github.com/charmed-hpc/filesystem-charms
   issues: 
-  - https://github.com/canonical/cephfs-server-proxy-operator/issues
+  - https://github.com/charmed-hpc/filesystem-charms/issues
 
 base: ubuntu@24.04
 platforms:
