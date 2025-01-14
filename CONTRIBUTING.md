@@ -1,4 +1,4 @@
-# Contributing to the filesystem-client-operator repository
+# Contributing to the filesystem-charms repository
 
 Do you want to contribute to the repository? You've come to
 the right place then! __Here is how you can get involved.__
@@ -68,7 +68,7 @@ Can also be used for pull requests.
 * `Statues: Help wanted` - Issues where we need help from the greater open source community to solve.
 
 For a complete look at this repository's labels, see the
-[project labels page](https://github.com/charmed-hpc/filesystem-client-operator/labels).
+[project labels page](https://github.com/charmed-hpc/filesystem-charms/labels).
 
 ## Bug Reports
 
@@ -135,16 +135,16 @@ the repository:
 
    ```bash
    # Clone your fork of the repo into the current directory
-   git clone https://github.com/<your-username>/filesystem-client-operator.git
+   git clone https://github.com/<your-username>/filesystem-charms.git
 
    # Navigate to the newly cloned directory
-   cd filesystem-client-operator
+   cd filesystem-charms
 
    # Assign the original repo to a remote called "upstream"
-   git remote add upstream https://github.com/charmed-hpc/filesystem-client-operator.git
+   git remote add upstream https://github.com/charmed-hpc/filesystem-charms.git
    ```
 
-2. If you cloned a while ago, pull the latest changes from the upstream filesystem-client-operator repository:
+2. If you cloned a while ago, pull the latest changes from the upstream filesystem-charms repository:
 
    ```bash
    git checkout main
@@ -162,19 +162,19 @@ the repository:
 
     ```bash
     # Apply formatting standards to code.
-    just fmt
+    just repo fmt
 
     # Check code against coding style standards.
-    just lint
+    just repo lint
 
     # Run type checking.
-    just typecheck
+    just repo typecheck
 
     # Run unit tests.
-    just unit
+    just repo unit
 
     # Run integration tests.
-    just integration
+    just repo integration
     ```
 
 5. Commit your changes in logical chunks to your topic branch.
