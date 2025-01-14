@@ -4,44 +4,41 @@
 
 import asyncio
 import logging
-from pathlib import Path
 
 import juju
 import pytest
-import yaml
-from charms.filesystem_client.v0.filesystem_info import CephfsInfo, NfsInfo
+from helpers import bootstrap_microceph, bootstrap_nfs_server
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-APP_NAME = METADATA["name"]
-
-NFS_INFO = NfsInfo(hostname="192.168.1.254", path="/srv", port=65535)
-CEPHFS_INFO = CephfsInfo(
-    fsid="123456789-0abc-defg-hijk-lmnopqrstuvw",
-    name="filesystem",
-    path="/export",
-    monitor_hosts=[
-        "192.168.1.1:6789",
-        "192.168.1.2:6789",
-        "192.168.1.3:6789",
-    ],
-    user="user",
-    key="R//appdqz4NP4Bxcc5XWrg==",
-)
+FILESYSTEM_CLIENT = "filesystem-client"
+NFS_SERVER_PROXY = "nfs-server-proxy"
+CEPHFS_SERVER_PROXY = "cephfs-server-proxy"
+CHARMS = [FILESYSTEM_CLIENT, NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY]
 
 
 @pytest.mark.abort_on_fail
 @pytest.mark.order(1)
-async def test_build_and_deploy(ops_test: OpsTest) -> None:
+async def test_build_and_deploy(
+    ops_test: OpsTest,
+    charm_base: str,
+    filesystem_client_charm,
+    nfs_server_proxy_charm,
+    cephfs_server_proxy_charm,
+) -> None:
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
     """
-    # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
-    server = await ops_test.build_charm("./tests/integration/server")
+    nfs_info = bootstrap_nfs_server()
+    cephfs_info = bootstrap_microceph()
+    logger.info(f"Deploying {', '.join(CHARMS)}")
+
+    # Pack charms.
+    filesystem_client, nfs_server_proxy, cephfs_server_proxy = await asyncio.gather(
+        filesystem_client_charm, nfs_server_proxy_charm, cephfs_server_proxy_charm
+    )
 
     # Deploy the charm and wait for active/idle status
     async with asyncio.TaskGroup() as tg:
@@ -55,36 +52,33 @@ async def test_build_and_deploy(ops_test: OpsTest) -> None:
         )
         tg.create_task(
             ops_test.model.deploy(
-                charm,
-                application_name=APP_NAME,
+                str(filesystem_client),
+                application_name=FILESYSTEM_CLIENT,
                 num_units=0,
             )
         )
         tg.create_task(
             ops_test.model.deploy(
-                server,
-                application_name="nfs-server",
-                config={
-                    "type": "nfs",
-                },
-                constraints=juju.constraints.parse("virt-type=virtual-machine"),
+                str(nfs_server_proxy),
+                application_name=NFS_SERVER_PROXY,
+                config={"hostname": nfs_info.hostname, "path": nfs_info.path},
             )
         )
         tg.create_task(
             ops_test.model.deploy(
-                server,
-                application_name="cephfs-server",
+                str(cephfs_server_proxy),
+                application_name=CEPHFS_SERVER_PROXY,
                 config={
-                    "type": "cephfs",
+                    "fsid": cephfs_info.fsid,
+                    "sharepoint": f"{cephfs_info.name}:{cephfs_info.path}",
+                    "monitor-hosts": " ".join(cephfs_info.monitor_hosts),
+                    "auth-info": f"{cephfs_info.user}:{cephfs_info.key}",
                 },
-                constraints=juju.constraints.parse(
-                    "virt-type=virtual-machine root-disk=50G mem=8G"
-                ),
             )
         )
         tg.create_task(
             ops_test.model.wait_for_idle(
-                apps=["nfs-server", "cephfs-server", "ubuntu"],
+                apps=[NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY, "ubuntu"],
                 status="active",
                 raise_on_blocked=True,
                 raise_on_error=True,
@@ -97,16 +91,20 @@ async def test_build_and_deploy(ops_test: OpsTest) -> None:
 @pytest.mark.order(2)
 async def test_integrate(ops_test: OpsTest) -> None:
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(ops_test.model.integrate(f"{APP_NAME}:juju-info", "ubuntu:juju-info"))
+        tg.create_task(
+            ops_test.model.integrate(f"{FILESYSTEM_CLIENT}:juju-info", "ubuntu:juju-info")
+        )
         tg.create_task(
             ops_test.model.wait_for_idle(apps=["ubuntu"], status="active", raise_on_error=True)
         )
         tg.create_task(
-            ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_error=True)
+            ops_test.model.wait_for_idle(
+                apps=[FILESYSTEM_CLIENT], status="blocked", raise_on_error=True
+            )
         )
 
     assert (
-        ops_test.model.applications[APP_NAME].units[0].workload_status_message
+        ops_test.model.applications[FILESYSTEM_CLIENT].units[0].workload_status_message
         == "Missing `mountpoint` in config."
     )
 
@@ -115,21 +113,27 @@ async def test_integrate(ops_test: OpsTest) -> None:
 @pytest.mark.order(3)
 async def test_nfs(ops_test: OpsTest) -> None:
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(ops_test.model.integrate(f"{APP_NAME}:filesystem", "nfs-server:filesystem"))
         tg.create_task(
-            ops_test.model.applications[APP_NAME].set_config(
+            ops_test.model.integrate(
+                f"{FILESYSTEM_CLIENT}:filesystem", f"{NFS_SERVER_PROXY}:filesystem"
+            )
+        )
+        tg.create_task(
+            ops_test.model.applications[FILESYSTEM_CLIENT].set_config(
                 {"mountpoint": "/nfs", "nodev": "true", "read-only": "true"}
             )
         )
         tg.create_task(
-            ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_error=True)
+            ops_test.model.wait_for_idle(
+                apps=[FILESYSTEM_CLIENT], status="active", raise_on_error=True
+            )
         )
 
     unit = ops_test.model.applications["ubuntu"].units[0]
     result = (await unit.ssh("ls /nfs")).strip("\n")
-    assert "test-0" in result
     assert "test-1" in result
     assert "test-2" in result
+    assert "test-3" in result
 
 
 @pytest.mark.abort_on_fail
@@ -139,29 +143,35 @@ async def test_cephfs(ops_test: OpsTest) -> None:
     # This guarantees that the new mountpoint is fresh.
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
-            ops_test.model.applications[APP_NAME].remove_relation(
-                "filesystem", "nfs-server:filesystem"
+            ops_test.model.applications[FILESYSTEM_CLIENT].remove_relation(
+                "filesystem", f"{NFS_SERVER_PROXY}:filesystem"
             )
         )
         tg.create_task(
-            ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", raise_on_error=True)
+            ops_test.model.wait_for_idle(
+                apps=[FILESYSTEM_CLIENT], status="blocked", raise_on_error=True
+            )
         )
 
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
-            ops_test.model.applications[APP_NAME].set_config(
+            ops_test.model.applications[FILESYSTEM_CLIENT].set_config(
                 {"mountpoint": "/cephfs", "noexec": "true", "nosuid": "true", "nodev": "false"}
             )
         )
         tg.create_task(
-            ops_test.model.integrate(f"{APP_NAME}:filesystem", "cephfs-server:filesystem")
+            ops_test.model.integrate(
+                f"{FILESYSTEM_CLIENT}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem"
+            )
         )
         tg.create_task(
-            ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_error=True)
+            ops_test.model.wait_for_idle(
+                apps=[FILESYSTEM_CLIENT], status="active", raise_on_error=True
+            )
         )
 
     unit = ops_test.model.applications["ubuntu"].units[0]
     result = (await unit.ssh("ls /cephfs")).strip("\n")
-    assert "test-0" in result
     assert "test-1" in result
     assert "test-2" in result
+    assert "test-3" in result

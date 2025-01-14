@@ -41,6 +41,7 @@ class FsClientCharm(CharmBase):
 
 class TestFilesystemInfo:
     """Test the filesystem_info library."""
+
     @pytest.mark.parametrize(
         ("host", "parsed"),
         [

@@ -120,19 +120,6 @@ class FilesystemClientCharm(ops.CharmBase):
         with self._mounts_manager.mounts() as mounts:
             opts = []
 
-
-
-
-
-
-
-
-
-
-
-
-
-
             opts.append("noexec" if config.noexec else "exec")
             opts.append("nosuid" if config.nosuid else "suid")
             opts.append("nodev" if config.nodev else "dev")
