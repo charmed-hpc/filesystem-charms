@@ -52,7 +52,7 @@ jobs:
       - name: Install Charmcraft
         run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Run linters
-        run: just lint
+        run: just repo lint
 
   unit-test:
     name: Unit tests
@@ -71,9 +71,9 @@ jobs:
       - name: Install Charmcraft
         run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Run unit tests
-        run: just unit
+        run: just repo unit
 
-  type-check:
+  typecheck:
     name: Static type checking
     runs-on: ubuntu-24.04
     steps:
@@ -90,7 +90,7 @@ jobs:
       - name: Install Charmcraft
         run: sudo snap install charmcraft --classic --channel latest/stable
       - name: Run tests
-        run: just typecheck
+        run: just repo typecheck
 
   integration-test:
     name: Integration tests (LXD)
@@ -99,7 +99,7 @@ jobs:
       - inclusive-naming-check
       - lint
       - unit-test
-      - type-check
+      - typecheck
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,4 +117,4 @@ jobs:
           provider: lxd
           juju-channel: 3.4/stable
       - name: Run tests
-        run: just integration
+        run: just repo integration
