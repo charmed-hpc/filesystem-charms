@@ -1,0 +1,10 @@
+[project]
+name = "lustre-server-proxy"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = ["ops"]
+
+[tool.repository]
+internal-libraries = [
+  "charms.filesystem_client.v0.filesystem_info"
+]
