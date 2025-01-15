@@ -1,0 +1,48 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: lustre-server-proxy
+type: charm
+title: Lustre Server Proxy
+summary: Charmed Lustre server for non-charmed Lustre storage appliances.
+description: |
+  Charmed Lustre server for non-charmed Lustre storage appliances.
+
+  Enable Lustre Client charms to mount non-charmed Lustre shares.
+links:
+  source: 
+  - https://github.com/charmed-hpc/filesystem-charms
+  issues: 
+  - https://github.com/charmed-hpc/filesystem-charms/issues
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm: {}
+
+peers:
+  server-peers:
+    interface: server_peers
+
+provides:
+  filesystem:
+    interface: filesystem_info
+
+config:
+  options:
+    mgs-nids:
+      description: |
+        List of MGS NIDs to connect to the Lustre cluster, separated by spaces.
+
+        Example usage:
+        $ juju config lustre-server-proxy mgs-nids="192.168.227.11@tcp1 192.168.227.12@tcp1"
+      type: string
+    fs-name:
+      description: |
+        Name of the filesystem exported by the Lustre cluster.
+
+        Example usage:
+        $ juju config lustre-server-proxy fs-name="lustre"
+      type: string

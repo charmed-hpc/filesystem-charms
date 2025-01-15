@@ -138,7 +138,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 _logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ class _UriData:
     @classmethod
     def from_uri(cls, uri: str) -> "_UriData":
         """Convert an URI string into a `_UriData`."""
-        _logger.debug(f"_UriData.from_uri: parsing `{uri}`")
+        _logger.debug("_UriData.from_uri: parsing `%s`", uri)
 
         result = urlparse(uri, allow_fragments=False)
         scheme = str(result.scheme or "")
@@ -269,7 +269,7 @@ class _UriData:
 
 def _hostinfo(host: str) -> tuple[str, Optional[int]]:
     """Parse a host string into the hostname and the port."""
-    _logger.debug(f"_hostinfo: parsing `{host}`")
+    _logger.debug("_hostinfo: parsing `%s`", host)
     if len(host) == 0:
         raise ParseUriError("invalid empty host")
 
@@ -351,7 +351,7 @@ class NfsInfo(FilesystemInfo):
     @classmethod
     def from_uri(cls, uri: str, _model: Model) -> "NfsInfo":
         """See :py:meth:`FilesystemInfo.from_uri` for documentation on this method."""
-        _logger.debug(f"NfsInfo.from_uri: parsing `{uri}`")
+        _logger.debug("NfsInfo.from_uri: parsing `%s`", uri)
 
         info = _UriData.from_uri(uri)
 
@@ -415,7 +415,7 @@ class CephfsInfo(FilesystemInfo):
     @classmethod
     def from_uri(cls, uri: str, model: Model) -> "CephfsInfo":
         """See :py:meth:`FilesystemInfo.from_uri` for documentation on this method."""
-        _logger.debug(f"CephfsInfo.from_uri: parsing `{uri}`")
+        _logger.debug("CephfsInfo.from_uri: parsing `%s`", uri)
         info = _UriData.from_uri(uri)
 
         if info.scheme != cls.filesystem_type():
@@ -499,6 +499,49 @@ class CephfsInfo(FilesystemInfo):
             )
         return secret
 
+@dataclass(frozen=True)
+class LustreInfo(FilesystemInfo):
+    """Information required to mount a Luste share."""
+
+    mgs_ids: [str]
+    """List of NID addresses for the MGS."""
+
+    fs_name: str
+    """Name of the exported filesystem."""
+
+    @classmethod
+    def from_uri(cls, uri: str, _model: Model) -> "LustreInfo":
+        """See :py:meth:`FilesystemInfo.from_uri` for documentation on this method."""
+        _logger.debug("LustreInfo.from_uri: parsing `%s`", uri)
+        info = _UriData.from_uri(uri)
+
+        if info.scheme != cls.filesystem_type():
+            raise ParseUriError("could not parse uri with incompatible scheme into `LustreInfo`")
+
+        mgs_ids = info.hosts
+
+        if not (fs_name := info.options.get("fs-name")):
+            raise ParseUriError("missing fs-name in uri for `LustreInfo`")
+
+        return LustreInfo(mgs_ids=mgs_ids, fs_name=fs_name)
+
+    def to_uri(self, _model: Model) -> str:
+        """See :py:meth:`FilesystemInfo.to_uri` for documentation on this method."""
+
+        return str(
+            _UriData(
+                scheme=self.filesystem_type(),
+                hosts=self.mgs_ids,
+                options={
+                    "fs-name": self.fs_name,
+                },
+            )
+        )
+
+    @classmethod
+    def filesystem_type(cls) -> str:
+        """See :py:meth:`FilesystemInfo.fs_type` for documentation on this method."""
+        return "lustre"
 
 @dataclass
 class Endpoint:
@@ -520,6 +563,8 @@ def _uri_to_fs_info(uri: str, model: Model) -> FilesystemInfo:
         return NfsInfo.from_uri(uri, model)
     elif scheme == CephfsInfo.filesystem_type():
         return CephfsInfo.from_uri(uri, model)
+    elif scheme == LustreInfo.filesystem_type():
+        return LustreInfo.from_uri(uri, model)
     else:
         raise FilesystemInfoError(f"unsupported filesystem type `{scheme}`")
 

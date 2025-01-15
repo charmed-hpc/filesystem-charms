@@ -6,6 +6,7 @@ members = [
     "cephfs-server-proxy",
     "filesystem-client",
     "filesystems",
+    "lustre-server-proxy",
     "nfs-server-proxy",
 ]
 
@@ -404,6 +405,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/3c/9f29f6cab7f35df8e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/2027ddede72d33be2effc087580aeba07e733a7360780ae87226f1f91bd8/kubernetes-30.1.0-py2.py3-none-any.whl", hash = "sha256:e212e8b7579031dd2e512168b617373bc1e03888d41ac4e04039240a292d478d", size = 1706042 },
 ]
+
+[[package]]
+name = "lustre-server-proxy"
+version = "0.0"
+source = { virtual = "charms/lustre-server-proxy" }
+dependencies = [
+    { name = "ops" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ops" }]
 
 [[package]]
 name = "macaroonbakery"
