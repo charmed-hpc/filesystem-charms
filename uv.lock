@@ -232,12 +232,10 @@ dev = [
     { name = "coverage" },
     { name = "juju" },
     { name = "ops", extra = ["testing"] },
-    { name = "pylxd" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-operator" },
     { name = "pytest-order" },
-    { name = "requests" },
     { name = "ruff" },
     { name = "tenacity" },
 ]
@@ -249,14 +247,12 @@ requires-dist = [
     { name = "juju", marker = "extra == 'dev'", specifier = "~=3.3" },
     { name = "ops", specifier = "~=2.17" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'" },
-    { name = "pylxd", marker = "extra == 'dev'", specifier = "~=2.3" },
     { name = "pyright", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "~=7.2" },
     { name = "pytest-operator", marker = "extra == 'dev'", specifier = "~=0.34" },
     { name = "pytest-order", marker = "extra == 'dev'" },
     { name = "pytest-order", marker = "extra == 'dev'", specifier = "~=1.1" },
-    { name = "requests", marker = "extra == 'dev'", specifier = "~=2.31.0" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "tenacity", marker = "extra == 'dev'", specifier = "~=8.2" },
 ]
@@ -670,22 +666,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pylxd"
-version = "2.3.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "python-dateutil" },
-    { name = "requests" },
-    { name = "requests-toolbelt" },
-    { name = "ws4py" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/8e/6a31a694560adaba20df521c3102bdecec06a0fea9c73ff1466834e2df30/pylxd-2.3.5.tar.gz", hash = "sha256:d67973dd2dc1728e3e1b41cc973e11e6cbceae87878d193ac04cc2b65a7158ef", size = 71781 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/44/ea48223c7fd42376cc9c6cdff3a8bf3cd19045a3c3722a2fcc9655cfd8a3/pylxd-2.3.5-py3-none-any.whl", hash = "sha256:f74affdb8a852c6241593c6bc022be1d6e2e700d9bc5efb180aeb7e7697a268d", size = 98084 },
-]
-
-[[package]]
 name = "pymacaroons"
 version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -866,18 +846,6 @@ wheels = [
 ]
 
 [[package]]
-name = "requests-toolbelt"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/61/d7545dafb7ac2230c70d38d31cbfe4cc64f7144dc41f6e4e4b78ecd9f5bb/requests-toolbelt-1.0.0.tar.gz", hash = "sha256:7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6", size = 206888 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/51/d4db610ef29373b879047326cbf6fa98b6c1969d6f6dc423279de2b1be2c/requests_toolbelt-1.0.0-py2.py3-none-any.whl", hash = "sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06", size = 54481 },
-]
-
-[[package]]
 name = "rsa"
 version = "4.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1031,13 +999,4 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/22/5ec2f39fff75f44aa626f86fa7f20594524a447d9c3be94d8482cd5572ef/websockets-14.1-cp312-cp312-win32.whl", hash = "sha256:1d045cbe1358d76b24d5e20e7b1878efe578d9897a25c24e6006eef788c0fdf0", size = 162838 },
     { url = "https://files.pythonhosted.org/packages/74/27/28f07df09f2983178db7bf6c9cccc847205d2b92ced986cd79565d68af4f/websockets-14.1-cp312-cp312-win_amd64.whl", hash = "sha256:90f4c7a069c733d95c308380aae314f2cb45bd8a904fb03eb36d1a4983a4993f", size = 163277 },
     { url = "https://files.pythonhosted.org/packages/b0/0b/c7e5d11020242984d9d37990310520ed663b942333b83a033c2f20191113/websockets-14.1-py3-none-any.whl", hash = "sha256:4d4fc827a20abe6d544a119896f6b78ee13fe81cbfef416f3f2ddf09a03f0e2e", size = 156277 },
-]
-
-[[package]]
-name = "ws4py"
-version = "0.6.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cb/55/dd8a5e1f975d1549494fe8692fc272602f17e475fe70de910cdd53aec902/ws4py-0.6.0.tar.gz", hash = "sha256:9f87b19b773f0a0744a38f3afa36a803286dd3197f0bb35d9b75293ec7002d19", size = 53288 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/62/dad08725f855f9695d1c2b34466cf0d1482d1168bb54d73d22b6b0124ba3/ws4py-0.6.0-py3-none-any.whl", hash = "sha256:1499c3fc103a65eb12d7b1ead7566f88487f6f678ab10ee4e53cf2411c068752", size = 45806 },
 ]
