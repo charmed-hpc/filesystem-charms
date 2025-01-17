@@ -6,6 +6,7 @@ import pytest
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
 FILESYSTEM_CLIENT_DIR = (
     Path(filesystem_client) if (filesystem_client := os.getenv("FILESYSTEM_CLIENT_DIR")) else None
 )
