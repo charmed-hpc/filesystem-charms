@@ -4,10 +4,12 @@
 
 import asyncio
 import logging
+import pathlib
+from collections.abc import Awaitable
 
 import juju
 import pytest
-from helpers import bootstrap_microceph, bootstrap_nfs_server
+from helpers import bootstrap_microceph, bootstrap_nfs_server, build_and_deploy_charm
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -23,24 +25,45 @@ CHARMS = [FILESYSTEM_CLIENT, NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY]
 async def test_build_and_deploy(
     ops_test: OpsTest,
     charm_base: str,
-    filesystem_client_charm,
-    nfs_server_proxy_charm,
-    cephfs_server_proxy_charm,
+    filesystem_client_charm: Awaitable[str | pathlib.Path],
+    nfs_server_proxy_charm: Awaitable[str | pathlib.Path],
+    cephfs_server_proxy_charm: Awaitable[str | pathlib.Path],
 ) -> None:
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
     """
-    nfs_info = bootstrap_nfs_server()
-    cephfs_info = bootstrap_microceph()
+
+    async def deploy_cephfs_proxy():
+        """Deploy a MicroCeph cluster and pass its info to a new `cephfs_server_proxy_charm`."""
+        cephfs_server_proxy = await cephfs_server_proxy_charm
+        (cephfs_info, _) = await asyncio.gather(
+            bootstrap_microceph(ops_test),
+            ops_test.model.deploy(str(cephfs_server_proxy), application_name=CEPHFS_SERVER_PROXY),
+        )
+        await ops_test.model.applications[CEPHFS_SERVER_PROXY].set_config(
+            {
+                "fsid": cephfs_info.fsid,
+                "sharepoint": f"{cephfs_info.name}:{cephfs_info.path}",
+                "monitor-hosts": " ".join(cephfs_info.monitor_hosts),
+                "auth-info": f"{cephfs_info.user}:{cephfs_info.key}",
+            }
+        )
+
+    async def deploy_nfs_proxy():
+        """Deploy an NFS server and pass its info to a new `nfs_server_proxy_charm`."""
+        nfs_server_proxy = await nfs_server_proxy_charm
+        (nfs_info, _) = await asyncio.gather(
+            bootstrap_nfs_server(ops_test),
+            ops_test.model.deploy(str(nfs_server_proxy), application_name=NFS_SERVER_PROXY),
+        )
+        await ops_test.model.applications[NFS_SERVER_PROXY].set_config(
+            {"hostname": nfs_info.hostname, "path": nfs_info.path}
+        )
+
     logger.info(f"Deploying {', '.join(CHARMS)}")
 
-    # Pack charms.
-    filesystem_client, nfs_server_proxy, cephfs_server_proxy = await asyncio.gather(
-        filesystem_client_charm, nfs_server_proxy_charm, cephfs_server_proxy_charm
-    )
-
-    # Deploy the charm and wait for active/idle status
+    # Deploy the charms and wait for active/idle status
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
             ops_test.model.deploy(
@@ -51,36 +74,17 @@ async def test_build_and_deploy(
             )
         )
         tg.create_task(
-            ops_test.model.deploy(
-                str(filesystem_client),
-                application_name=FILESYSTEM_CLIENT,
-                num_units=0,
+            build_and_deploy_charm(
+                ops_test, filesystem_client_charm, application_name=FILESYSTEM_CLIENT, num_units=0
             )
         )
-        tg.create_task(
-            ops_test.model.deploy(
-                str(nfs_server_proxy),
-                application_name=NFS_SERVER_PROXY,
-                config={"hostname": nfs_info.hostname, "path": nfs_info.path},
-            )
-        )
-        tg.create_task(
-            ops_test.model.deploy(
-                str(cephfs_server_proxy),
-                application_name=CEPHFS_SERVER_PROXY,
-                config={
-                    "fsid": cephfs_info.fsid,
-                    "sharepoint": f"{cephfs_info.name}:{cephfs_info.path}",
-                    "monitor-hosts": " ".join(cephfs_info.monitor_hosts),
-                    "auth-info": f"{cephfs_info.user}:{cephfs_info.key}",
-                },
-            )
-        )
+        tg.create_task(deploy_nfs_proxy())
+        tg.create_task(deploy_cephfs_proxy())
         tg.create_task(
             ops_test.model.wait_for_idle(
                 apps=[NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY, "ubuntu"],
                 status="active",
-                raise_on_blocked=True,
+                raise_on_blocked=False,
                 raise_on_error=True,
                 timeout=1000,
             )
