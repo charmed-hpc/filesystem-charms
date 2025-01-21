@@ -24,3 +24,9 @@ external
 .pytest_cache
 requirements.txt
 dev-requirements.txt
+
+# Managed by Terraform
+
+.terraform
+.terraform.lock.hcl
+*.tfstate*
