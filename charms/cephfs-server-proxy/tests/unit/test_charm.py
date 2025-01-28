@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 """Test base charm events such as Install, ConfigChanged, etc."""
 
 from charm import CephFSServerProxyCharm
 from ops import testing
+
+from charms.filesystem_client.v0.filesystem_info import CephfsInfo
 
 
 def test_config_missing_all():
@@ -63,14 +65,31 @@ def test_config_invalid_auth_info():
 
 def test_config_full():
     """Test config-changed handler with full config parameters."""
-    context = testing.Context(CephFSServerProxyCharm)
+    rel = testing.PeerRelation(
+        endpoint="server-peers",
+    )
     state = testing.State(
         config={
             "fsid": "354ca7c4-f10d-11ee-93f8-1f85f87b7845",
             "sharepoint": "ceph-fs:/",
             "monitor-hosts": "10.5.0.80:6789 10.5.2.23:6789 10.5.2.17:6789",
             "auth-info": "ceph-client:AQAPdQldX264KBAAOyaxen/y0XBl1qxlGPTabw==",
-        }
+        },
+        relations={rel},
+        leader=True,
     )
-    out = context.run(context.on.config_changed(), state)
+    context = testing.Context(CephFSServerProxyCharm)
+
+    with context(context.on.config_changed(), state) as manager:
+        out = manager.run()
+        info = CephfsInfo.from_uri(
+            out.get_relation(rel.id).local_app_data["endpoint"], manager.charm.model
+        )
+
     assert out.unit_status == testing.ActiveStatus()
+    assert info.fsid == "354ca7c4-f10d-11ee-93f8-1f85f87b7845"
+    assert info.name == "ceph-fs"
+    assert info.path == "/"
+    assert info.monitor_hosts == ["10.5.0.80:6789", "10.5.2.23:6789", "10.5.2.17:6789"]
+    assert info.user == "ceph-client"
+    assert info.key == "AQAPdQldX264KBAAOyaxen/y0XBl1qxlGPTabw=="
