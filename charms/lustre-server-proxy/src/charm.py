@@ -32,7 +32,7 @@ class LustreServerProxyCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus("No configured fs-name")
             return
 
-        self._filesystem.set_info(LustreInfo(mgs_ids=mgs_nids, fs_name=fs_name))
+        self._filesystem.set_info(LustreInfo(mgs_ids=mgs_nids.split(), fs_name=fs_name))
 
         self.unit.status = ops.ActiveStatus()
 
