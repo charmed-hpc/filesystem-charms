@@ -1,5 +1,16 @@
-# Copyright 2024 Canonical Ltd.
-# See LICENSE for licensing details.
+# Copyright 2024-2025 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 name: Release to latest/edge
 
@@ -43,13 +54,20 @@ jobs:
         uses: canonical/setup-lxd@v0.1.2
         with:
           channel: 5.21/stable
-      - name: Release updated libraries to Charmhub
+      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
+      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
+      #   when accessing the charmcraft build cache in parallel builds.
+      - name: Revert to charmcraft 3.2.3
+        run: |
+          sudo snap refresh charmcraft --revision=5858
+          sudo snap refresh charmcraft --hold
+      - name: Publish updated charm libraries to Charmhub
         uses: canonical/charming-actions/release-libraries@2.6.3
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           charm-path: "./_build/${{ matrix.charm }}"
-      - name: Upload charm to Charmhub
+      - name: Publish charm to Charmhub
         uses: canonical/charming-actions/upload-charm@2.6.3
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
