@@ -207,7 +207,15 @@ def _get_endpoint_and_opts(info: FilesystemInfo) -> tuple[str, list[str]]:
                 pass
 
             endpoint = f"{hostname}:{path}"
-            options = [f"port={port}"] if port else []
+            options = [
+                "fstype=nfs",
+                # NFS mount client should automatically fallback to v4.1, v3 or v2 to accommodate the server's
+                # supported version.
+                "nfsvers=4",
+                "minorversion=2",
+            ]
+            if port:
+                options.append(f"port={port}")
         case CephfsInfo(
             fsid=fsid, name=name, path=path, monitor_hosts=mons, user=user, key=secret
         ):
