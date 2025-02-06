@@ -36,12 +36,6 @@ variable "config" {
   default     = {}
 }
 
-variable "constraints" {
-  description = "Deployment constraints"
-  type        = string
-  default     = "arch=amd64"
-}
-
 variable "model_name" {
   description = "Model name"
   type        = string
