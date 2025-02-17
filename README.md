@@ -10,7 +10,7 @@ The `filesystem-charms` repository is a collection of charmed operators that ena
 request, and mount shared filesystems. We currently have:
 
 
-* [`filesystem-operator`](./charms/filesystem-operator/): requests and mounts exported filesystems on virtual machines.
+* [`filesystem-client-operator`](./charms/filesystem-client/): requests and mounts exported filesystems on virtual machines.
 * [`nfs-server-proxy-operator`](./charms/nfs-server-proxy/): exports NFS shares from NFS servers not managed by Juju.
 * [`cephfs-server-proxy-operator`](./charms/cephfs-server-proxy): exports Ceph filesystems from Ceph clusters not managed by Juju.
 
