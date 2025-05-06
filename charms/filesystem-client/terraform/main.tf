@@ -24,5 +24,4 @@ resource "juju_application" "filesystem-client" {
   }
 
   config      = var.config
-  units       = 0
 }
