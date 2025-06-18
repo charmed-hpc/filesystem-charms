@@ -54,6 +54,25 @@ jobs:
       - name: Run linters
         run: just repo lint
 
+  commitlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install commitlint
+        run: npm install -D @commitlint/cli @commitlint/config-conventional
+      - name: Validate PR commits with commitlint
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
   unit-test:
     name: Unit tests
     runs-on: ubuntu-24.04
@@ -100,6 +119,7 @@ jobs:
       - lint
       - unit-test
       - typecheck
+      - commitlint
     steps:
       - name: Checkout
         uses: actions/checkout@v4
