@@ -207,7 +207,7 @@ def _get_endpoint_and_opts(info: FilesystemInfo) -> tuple[str, list[str]]:
                 pass
 
             endpoint = f"{hostname}:{path}"
-            options = ["fstype=nfs4"]
+            options = ["fstype=nfs"]
             if port:
                 options.append(f"port={port}")
         case CephfsInfo(
