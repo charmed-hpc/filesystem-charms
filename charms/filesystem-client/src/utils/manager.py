@@ -16,7 +16,11 @@ import ops
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
-from charms.filesystem_client.v0.filesystem_info import CephfsInfo, FilesystemInfo, NfsInfo
+from charms.filesystem_client.v0.filesystem_info import (
+    CephfsInfo,
+    FilesystemInfo,
+    NfsInfo,
+)
 
 _logger = logging.getLogger(__name__)
 
