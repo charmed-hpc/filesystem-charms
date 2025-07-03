@@ -5,6 +5,6 @@ requires-python = "==3.12.*"
 dependencies = ["ops"]
 
 [tool.repository]
-internal-libraries = [
-  "charms.filesystem_client.v0.filesystem_info"
+libraries = [
+  "filesystem-client.filesystem_info"
 ]

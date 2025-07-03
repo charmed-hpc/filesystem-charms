@@ -452,7 +452,12 @@ class CephfsInfo(FilesystemInfo):
             raise ParseUriError(f"invalid kind `{kind}` for auth info")
 
         return CephfsInfo(
-            fsid=fsid, name=name, path=path, monitor_hosts=monitor_hosts, user=user, key=key
+            fsid=fsid,
+            name=name,
+            path=path,
+            monitor_hosts=monitor_hosts,
+            user=user,
+            key=key,
         )
 
     def to_uri(self, model: Model) -> str:
@@ -499,6 +504,7 @@ class CephfsInfo(FilesystemInfo):
             )
         return secret
 
+
 @dataclass(frozen=True)
 class LustreInfo(FilesystemInfo):
     """Information required to mount a Luste share."""
@@ -527,7 +533,6 @@ class LustreInfo(FilesystemInfo):
 
     def to_uri(self, _model: Model) -> str:
         """See :py:meth:`FilesystemInfo.to_uri` for documentation on this method."""
-
         return str(
             _UriData(
                 scheme=self.filesystem_type(),
@@ -542,6 +547,7 @@ class LustreInfo(FilesystemInfo):
     def filesystem_type(cls) -> str:
         """See :py:meth:`FilesystemInfo.fs_type` for documentation on this method."""
         return "lustre"
+
 
 @dataclass
 class Endpoint:

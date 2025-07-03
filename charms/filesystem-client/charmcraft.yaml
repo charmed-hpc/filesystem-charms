@@ -21,12 +21,6 @@ platforms:
 parts:
   charm: {}
 
-charm-libs:
-  - lib: operator-libs-linux.apt
-    version: "0.15"
-  - lib: operator-libs-linux.systemd
-    version: "1.4"
-
 subordinate: true
 
 requires:

@@ -3,7 +3,7 @@ name = "filesystems"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops ~= 2.17"
+    "ops ~= 3.0"
 ]
 
 [project.optional-dependencies]
@@ -14,8 +14,6 @@ dev = [
   "pyright",
 
   # Unit
-  "pytest",
-  "pytest-order",
   "coverage[toml]",
   "ops[testing]",
 
@@ -30,15 +28,28 @@ dev = [
 [tool.uv.workspace]
 members = ["charms/*"]
 
+[tool.repository]
+external-libraries = [
+    { lib = "operator-libs-linux.apt", version = "0.16" },
+    { lib = "operator-libs-linux.systemd", version = "1.4" },
+]
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
+include = [
+    "_build/**/src/*",
+    "_build/filesystem-client/lib/charms/filesystem_client/*"
+]
+omit = [
+    "_build/libs/*"
+]
 
 [tool.coverage.report]
 show_missing = true
 
 [tool.coverage.paths]
-source = ["charms", "*/_build"]   
+source = ["charms", "*/_build"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

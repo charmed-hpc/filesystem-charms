@@ -47,7 +47,10 @@ async def test_build_and_deploy(
         )
         tg.create_task(
             build_and_deploy_charm(
-                ops_test, filesystem_client_charm, application_name=FILESYSTEM_CLIENT, num_units=0
+                ops_test,
+                filesystem_client_charm,
+                application_name=FILESYSTEM_CLIENT,
+                num_units=0,
             )
         )
 
@@ -58,7 +61,9 @@ async def test_build_and_deploy(
                 nfs_server_proxy = await nfs_server_proxy_charm
                 (
                     await ops_test.model.deploy(
-                        str(nfs_server_proxy), base=charm_base, application_name=NFS_SERVER_PROXY
+                        str(nfs_server_proxy),
+                        base=charm_base,
+                        application_name=NFS_SERVER_PROXY,
                     ),
                 )
 
@@ -180,7 +185,12 @@ async def test_cephfs(ops_test: OpsTest) -> None:
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
             ops_test.model.applications[FILESYSTEM_CLIENT].set_config(
-                {"mountpoint": "/cephfs", "noexec": "true", "nosuid": "true", "nodev": "false"}
+                {
+                    "mountpoint": "/cephfs",
+                    "noexec": "true",
+                    "nosuid": "true",
+                    "nodev": "false",
+                }
             )
         )
         tg.create_task(

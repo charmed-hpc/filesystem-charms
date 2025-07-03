@@ -73,7 +73,12 @@ class CephFSServerProxyCharm(ops.CharmBase):
 
         self._filesystem.set_info(
             CephfsInfo(
-                fsid=fsid, name=name, path=path, monitor_hosts=monitor_hosts, user=user, key=key
+                fsid=fsid,
+                name=name,
+                path=path,
+                monitor_hosts=monitor_hosts,
+                user=user,
+                key=key,
             )
         )
 
