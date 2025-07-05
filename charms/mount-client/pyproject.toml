@@ -1,0 +1,10 @@
+[project]
+name = "mount-client"
+version = "0.0"
+requires-python = "==3.12.*"
+dependencies = ["ops"]
+
+[tool.repository]
+libraries = [
+    "filesystem-client.mount_info"
+]

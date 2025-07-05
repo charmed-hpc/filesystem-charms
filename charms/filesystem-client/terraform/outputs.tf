@@ -19,6 +19,7 @@ output "app_name" {
 output "requires" {
   value = {
     filesystem = "filesystem"
+    mount      = "mount"
     juju-info  = "juju-info"
   }
 }

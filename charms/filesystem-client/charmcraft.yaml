@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 name: filesystem-client
@@ -27,6 +27,9 @@ requires:
   filesystem:
     interface: filesystem_info
     limit: 1
+  mount:
+    interface: mount_info
+    scope: container
   juju-info:
     interface: juju-info
     scope: container
