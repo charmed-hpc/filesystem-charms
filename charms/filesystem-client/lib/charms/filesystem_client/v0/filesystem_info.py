@@ -96,6 +96,21 @@ class StorageServerCharm(ops.CharmBase):
 ```
 """
 
+__all__ = [
+    "FilesystemInfoError",
+    "ParseUriError",
+    "FilesystemInfo",
+    "NfsInfo",
+    "CephfsInfo",
+    "Endpoint",
+    "FilesystemEvent",
+    "MountFilesystemEvent",
+    "UmountFilesystemEvent",
+    "FilesystemRequiresEvents",
+    "FilesystemRequires",
+    "FilesystemProvides",
+]
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -114,21 +129,6 @@ from ops.charm import (
 )
 from ops.framework import EventSource, Object
 from ops.model import Model, Relation
-
-__all__ = [
-    "FilesystemInfoError",
-    "ParseUriError",
-    "FilesystemInfo",
-    "NfsInfo",
-    "CephfsInfo",
-    "Endpoint",
-    "FilesystemEvent",
-    "MountFilesystemEvent",
-    "UmountFilesystemEvent",
-    "FilesystemRequiresEvents",
-    "FilesystemRequires",
-    "FilesystemProvides",
-]
 
 # The unique Charmhub library identifier, never change it
 LIBID = "7e11f60a31a441aaa70ada2f41c75580"
