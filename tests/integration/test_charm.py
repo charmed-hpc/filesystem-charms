@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import asyncio
@@ -9,14 +9,17 @@ from pathlib import Path
 
 import juju
 import pytest
-from helpers import bootstrap_microceph, bootstrap_nfs_server, build_and_deploy_charm
+from helpers import bootstrap_microceph, bootstrap_nfs_server
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
 FILESYSTEM_CLIENT = "filesystem-client"
+MOUNT_PROVIDER = "mount-provider"
 NFS_SERVER_PROXY = "nfs-server-proxy"
 CEPHFS_SERVER_PROXY = "cephfs-server-proxy"
+MOUNT_REQUIRERS = ["srv", "shared"]
 CHARMS = [FILESYSTEM_CLIENT, NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY]
 
 
@@ -28,6 +31,7 @@ async def test_build_and_deploy(
     filesystem_client_charm: Awaitable[str | Path],
     nfs_server_proxy_charm: Awaitable[str | Path],
     cephfs_server_proxy_charm: Awaitable[str | Path],
+    test_mount_client_charm: Awaitable[Path],
 ) -> None:
     """Build the charm-under-test and deploy it together with related charms.
 
@@ -45,14 +49,21 @@ async def test_build_and_deploy(
                 constraints=juju.constraints.parse("virt-type=virtual-machine"),
             )
         )
-        tg.create_task(
-            build_and_deploy_charm(
-                ops_test,
-                filesystem_client_charm,
-                application_name=FILESYSTEM_CLIENT,
-                num_units=0,
-            )
-        )
+
+        async def deploy_filesystem_clients():
+            filesystem_client = await filesystem_client_charm
+
+            for app in [FILESYSTEM_CLIENT, MOUNT_PROVIDER]:
+                tg.create_task(
+                    ops_test.model.deploy(
+                        str(filesystem_client),
+                        application_name=app,
+                        channel="edge" if isinstance(filesystem_client, str) else None,
+                        num_units=0,
+                    )
+                )
+
+        tg.create_task(deploy_filesystem_clients())
 
         async def deploy_nfs_proxy():
             """Deploy an NFS server and pass its info to a new `nfs_server_proxy_charm`."""
@@ -115,6 +126,22 @@ async def test_build_and_deploy(
             )
         )
 
+        async def deploy_test_mount_clients():
+            """Deploy the test mount clients."""
+            test_mount_client = await test_mount_client_charm
+
+            for app in MOUNT_REQUIRERS:
+                tg.create_task(
+                    ops_test.model.deploy(
+                        str(test_mount_client),
+                        base=charm_base,
+                        application_name=app,
+                        constraints=juju.constraints.parse("virt-type=virtual-machine"),
+                    )
+                )
+
+        tg.create_task(deploy_test_mount_clients())
+
 
 @pytest.mark.abort_on_fail
 @pytest.mark.order(2)
@@ -128,14 +155,34 @@ async def test_integrate(ops_test: OpsTest) -> None:
         )
         tg.create_task(
             ops_test.model.wait_for_idle(
+                apps=MOUNT_REQUIRERS, status="blocked", raise_on_error=True
+            )
+        )
+        tg.create_task(
+            ops_test.model.wait_for_idle(
                 apps=[FILESYSTEM_CLIENT], status="blocked", raise_on_error=True
             )
         )
+        tg.create_task(
+            ops_test.model.wait_for_idle(
+                apps=[MOUNT_PROVIDER], status="waiting", raise_on_error=True
+            )
+        )
+        for app in MOUNT_REQUIRERS:
+            tg.create_task(ops_test.model.integrate(f"{MOUNT_PROVIDER}:mount", f"{app}:mount"))
 
-    assert (
-        ops_test.model.applications[FILESYSTEM_CLIENT].units[0].workload_status_message
-        == "Missing `mountpoint` in config."
-    )
+    for unit in ops_test.model.applications[FILESYSTEM_CLIENT].units:
+        assert unit.workload_status_message == "Missing `mountpoint` config or `mount` integration"
+
+    for unit in ops_test.model.applications[MOUNT_PROVIDER].units:
+        assert unit.workload_status_message == "Waiting for mountpoint from `mount` integration"
+
+
+async def check_files(unit: Unit, path: str) -> None:
+    result = (await unit.ssh(f"ls {path}")).strip("\n")
+    assert "test-1" in result
+    assert "test-2" in result
+    assert "test-3" in result
 
 
 @pytest.mark.abort_on_fail
@@ -148,21 +195,27 @@ async def test_nfs(ops_test: OpsTest) -> None:
             )
         )
         tg.create_task(
+            ops_test.model.integrate(
+                f"{MOUNT_PROVIDER}:filesystem", f"{NFS_SERVER_PROXY}:filesystem"
+            )
+        )
+        tg.create_task(
             ops_test.model.applications[FILESYSTEM_CLIENT].set_config(
                 {"mountpoint": "/nfs", "nodev": "true", "read-only": "true"}
             )
         )
         tg.create_task(
             ops_test.model.wait_for_idle(
-                apps=[FILESYSTEM_CLIENT], status="active", raise_on_error=True
+                apps=[FILESYSTEM_CLIENT] + MOUNT_REQUIRERS, status="active", raise_on_error=True
             )
         )
+        for app in MOUNT_REQUIRERS:
+            tg.create_task(ops_test.model.applications[app].set_config({"mountpoint": f"/{app}"}))
 
-    unit = ops_test.model.applications["ubuntu"].units[0]
-    result = (await unit.ssh("ls /nfs")).strip("\n")
-    assert "test-1" in result
-    assert "test-2" in result
-    assert "test-3" in result
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(check_files(ops_test.model.applications["ubuntu"].units[0], "/nfs"))
+        for app in MOUNT_REQUIRERS:
+            tg.create_task(check_files(ops_test.model.applications[app].units[0], f"/{app}"))
 
 
 @pytest.mark.abort_on_fail
@@ -177,8 +230,13 @@ async def test_cephfs(ops_test: OpsTest) -> None:
             )
         )
         tg.create_task(
+            ops_test.model.applications[MOUNT_PROVIDER].remove_relation(
+                "filesystem", f"{NFS_SERVER_PROXY}:filesystem"
+            )
+        )
+        tg.create_task(
             ops_test.model.wait_for_idle(
-                apps=[FILESYSTEM_CLIENT], status="blocked", raise_on_error=True
+                apps=[FILESYSTEM_CLIENT, MOUNT_PROVIDER], status="blocked", raise_on_error=True
             )
         )
 
@@ -199,13 +257,17 @@ async def test_cephfs(ops_test: OpsTest) -> None:
             )
         )
         tg.create_task(
+            ops_test.model.integrate(
+                f"{MOUNT_PROVIDER}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem"
+            )
+        )
+        tg.create_task(
             ops_test.model.wait_for_idle(
-                apps=[FILESYSTEM_CLIENT], status="active", raise_on_error=True
+                apps=[FILESYSTEM_CLIENT, MOUNT_PROVIDER], status="active", raise_on_error=True
             )
         )
 
-    unit = ops_test.model.applications["ubuntu"].units[0]
-    result = (await unit.ssh("ls /cephfs")).strip("\n")
-    assert "test-1" in result
-    assert "test-2" in result
-    assert "test-3" in result
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(check_files(ops_test.model.applications["ubuntu"].units[0], "/nfs"))
+        for app in MOUNT_REQUIRERS:
+            tg.create_task(check_files(ops_test.model.applications[app].units[0], f"/{app}"))

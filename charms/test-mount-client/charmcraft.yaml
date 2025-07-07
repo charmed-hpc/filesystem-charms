@@ -1,0 +1,25 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: test-mount-client
+type: charm
+title: Test mount client
+summary: Operator to test the mount relation from `filesystem-client`
+description: Test mount client
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm: {}
+
+provides:
+  mount:
+    interface: mount_info
+
+config:
+  options:
+    mountpoint:
+      description: Mount point of the filesystem.
+      type: string

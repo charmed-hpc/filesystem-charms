@@ -1,3 +1,6 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 import logging
 import os
 from pathlib import Path
@@ -8,7 +11,9 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 FILESYSTEM_CLIENT_DIR = (
-    Path(filesystem_client) if (filesystem_client := os.getenv("FILESYSTEM_CLIENT_DIR")) else None
+    Path(filesystem_client)
+    if (filesystem_client := os.getenv("FILESYSTEM_CLIENT_DIR"))
+    else None
 )
 NFS_SERVER_PROXY_DIR = (
     Path(nfs_server_proxy) if (nfs_server_proxy := os.getenv("NFS_SERVER_PROXY_DIR")) else None
@@ -84,3 +89,15 @@ async def cephfs_server_proxy_charm(request, ops_test: OpsTest) -> str | Path:
         return "cephfs-server-proxy"
 
     return await ops_test.build_charm(CEPHFS_SERVER_PROXY_DIR, verbosity="verbose")
+
+
+@pytest.fixture(scope="module")
+async def test_mount_client_charm(request, ops_test: OpsTest) -> Path:
+    """Pack test-mount-client charm to use for integration tests.
+
+    Returns:
+        `Path` of the charm file built locally.
+    """
+    return await ops_test.build_charm(
+        Path(os.getenv("TEST_MOUNT_CLIENT_DIR")), verbosity="verbose"
+    )
