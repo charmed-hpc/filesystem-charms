@@ -121,6 +121,12 @@ jobs:
       - typecheck
       - commitlint
     steps:
+      - name: Remove unnecessary files
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install Just
@@ -136,12 +142,5 @@ jobs:
         with:
           provider: lxd
           juju-channel: 3.6/stable
-      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
-      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
-      #   when accessing the charmcraft build cache in parallel builds.
-      - name: Revert to charmcraft 3.2.3
-        run: |
-          sudo snap refresh charmcraft --revision=5858
-          sudo snap refresh charmcraft --hold
       - name: Run tests
         run: just repo integration
