@@ -2,7 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Test the interfaces charm library."""
+"""Test the filesystem_info charm library."""
 
 import pytest
 from ops import CharmBase
