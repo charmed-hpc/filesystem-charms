@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Manage machine mounts and dependencies."""
@@ -100,10 +100,11 @@ class MountsManager:
     """Manager for mounted filesystems in the current system."""
 
     def __init__(self, charm: ops.CharmBase) -> None:
+        unit_id = charm.unit.name.replace("/", "-")
         # Lazily initialized
         self._pkgs = None
-        self._master_file = pathlib.Path(f"/etc/auto.master.d/{charm.app.name}.autofs")
-        self._autofs_file = pathlib.Path(f"/etc/auto.{charm.app.name}")
+        self._master_file = pathlib.Path(f"/etc/auto.master.d/{unit_id}.autofs")
+        self._autofs_file = pathlib.Path(f"/etc/auto.{unit_id}")
 
     @property
     def _packages(self) -> list[apt.DebianPackage]:
