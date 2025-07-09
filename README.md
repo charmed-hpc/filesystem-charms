@@ -9,10 +9,9 @@
 The `filesystem-charms` repository is a collection of charmed operators that enables you to provide,
 request, and mount shared filesystems. We currently have:
 
-
-* [`filesystem-client-operator`](./charms/filesystem-client/): requests and mounts exported filesystems on virtual machines.
-* [`nfs-server-proxy-operator`](./charms/nfs-server-proxy/): exports NFS shares from NFS servers not managed by Juju.
-* [`cephfs-server-proxy-operator`](./charms/cephfs-server-proxy): exports Ceph filesystems from Ceph clusters not managed by Juju.
+- [`filesystem-client-operator`](./charms/filesystem-client/): requests and mounts exported filesystems on virtual machines.
+- [`nfs-server-proxy-operator`](./charms/nfs-server-proxy/): exports NFS shares from NFS servers not managed by Juju.
+- [`cephfs-server-proxy-operator`](./charms/cephfs-server-proxy): exports Ceph filesystems from Ceph clusters not managed by Juju.
 
 ## ✨ Getting started
 
@@ -120,10 +119,26 @@ juju deploy cephfs-server-proxy --channel latest/edge \
   --config monitor-hosts=<HOST> \
   --config auth-info=fs-client:<CLIENT_KEY>
 juju deploy ubuntu --base ubuntu@24.04 --constraints virt-type=virtual-machine
-juju deploy filesysten-client data --channel latest/edge --config mountpoint=/data
+juju deploy filesystem-client data --channel latest/edge --config mountpoint=/data
 juju integrate data:juju-info ubuntu:juju-info
 juju integrate data:filesystem cephfs-server-proxy:filesystem
 ```
+
+#### Mounting using charm provided configuration
+
+In all the previous examples, the `filesystem-client` charm has been setup using manually
+provided configuration options, but if you are a charm author and your charm needs a shared filesystem,
+you can also integrate with `filesystem-client` using the [`mount_info`] charm library. Assuming
+your charm is called `my-charm`, and the charm has been setup to support the `mount` integration,
+mounting a filesystem can be accomplished by simply doing:
+
+```shell
+juju deploy my-charm
+juju deploy filesystem-client data --channel latest/edge
+juju integrate data:mount my-charm:mount
+```
+
+[`mount_info`]: ./charms/filesystem-client/lib/charms/filesystem_client/v0/mount_info.py
 
 ## 🤝 Project and community
 
@@ -131,11 +146,11 @@ The filesystem charms are a project of the [Ubuntu High-Performance Computing co
 It is an open source project that is welcome to community involvement, contributions, suggestions, fixes, and
 constructive feedback. Interested in being involved with the development of the filesystem charms? Check out these links below:
 
-* [Join our online chat](https://matrix.to/#/#ubuntu-hpc:matrix.org)
-* [Contributing guidelines](./CONTRIBUTING.md)
-* [Code of conduct](https://ubuntu.com/community/ethos/code-of-conduct)
-* [File a bug report](https://github.com/charmed-hpc/filesystem-charms/issues)
-* [Juju SDK docs](https://juju.is/docs/sdk)
+- [Join our online chat](https://matrix.to/#/#ubuntu-hpc:matrix.org)
+- [Contributing guidelines](./CONTRIBUTING.md)
+- [Code of conduct](https://ubuntu.com/community/ethos/code-of-conduct)
+- [File a bug report](https://github.com/charmed-hpc/filesystem-charms/issues)
+- [Juju SDK docs](https://juju.is/docs/sdk)
 
 ## 📋 License
 
