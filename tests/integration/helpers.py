@@ -46,17 +46,14 @@ async def build_and_deploy_charm(
     await ops_test.model.deploy(str(charm), *deploy_args, **deploy_kwargs)
 
 
-async def bootstrap_nfs_server(ops_test: OpsTest) -> NfsInfo:
+async def bootstrap_nfs_server(ops_test: OpsTest, machine_id: str) -> NfsInfo:
     """Bootstrap a minimal NFS kernel server in Juju.
 
     Returns:
         NfsInfo: Information to mount the NFS share.
     """
     await ops_test.model.deploy(
-        "ubuntu",
-        application_name="nfs-server",
-        base="ubuntu@24.04",
-        constraints=juju.constraints.parse("virt-type=virtual-machine"),
+        "ubuntu", application_name="nfs-server", base="ubuntu@24.04", to=machine_id
     )
     await ops_test.model.wait_for_idle(
         apps=["nfs-server"],
@@ -70,7 +67,6 @@ async def bootstrap_nfs_server(ops_test: OpsTest) -> NfsInfo:
 
     exports = textwrap.dedent(
         """
-        /srv     *(ro,sync,subtree_check)
         /data    *(rw,sync,no_subtree_check,no_root_squash)
         """
     ).strip("\n")
@@ -92,7 +88,7 @@ async def bootstrap_nfs_server(ops_test: OpsTest) -> NfsInfo:
     return NfsInfo(hostname=address, port=None, path="/data")
 
 
-async def bootstrap_microceph(ops_test: OpsTest) -> CephfsInfo:
+async def bootstrap_microceph(ops_test: OpsTest, machine_id: str) -> CephfsInfo:
     """Bootstrap a minimal Microceph cluster in Juju.
 
     Returns:
@@ -105,14 +101,14 @@ async def bootstrap_microceph(ops_test: OpsTest) -> CephfsInfo:
         application_name="microceph",
         base="ubuntu@24.04",
         channel="squid/beta",
-        constraints=juju.constraints.parse("mem=4G root-disk=20G virt-type=virtual-machine"),
         num_units=1,
         storage={"osd-standalone": juju.constraints.parse_storage_constraint("loop,3,1G")},
+        to=machine_id,
     )
     await ops_test.model.wait_for_idle(
         apps=["microceph"],
         status="active",
-        timeout=1000,
+        timeout=5000,
     )
 
     machine = ops_test.model.applications["microceph"].units[0].machine

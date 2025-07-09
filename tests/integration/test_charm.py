@@ -20,12 +20,17 @@ MOUNT_PROVIDER = "mount-provider"
 NFS_SERVER_PROXY = "nfs-server-proxy"
 CEPHFS_SERVER_PROXY = "cephfs-server-proxy"
 MOUNT_REQUIRERS = ["srv", "shared"]
-CHARMS = [FILESYSTEM_CLIENT, NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY]
+CHARMS = [
+    FILESYSTEM_CLIENT,
+    NFS_SERVER_PROXY,
+    CEPHFS_SERVER_PROXY,
+    MOUNT_PROVIDER,
+] + MOUNT_REQUIRERS
 
 
 @pytest.mark.abort_on_fail
 @pytest.mark.order(1)
-async def test_build_and_deploy(
+async def test_build_and_deploy(  # noqa: C901
     ops_test: OpsTest,
     charm_base: str,
     filesystem_client_charm: Awaitable[str | Path],
@@ -39,6 +44,24 @@ async def test_build_and_deploy(
     """
     logger.info(f"Deploying {', '.join(CHARMS)}")
 
+    async def create_machine(
+        constraints: juju.constraints.ConstraintsDict,
+    ) -> juju.machine.Machine:
+        machine: juju.machine.Machine = await ops_test.model.add_machine(
+            constraints=constraints,
+            series="noble",
+        )
+        while machine.status != "running":
+            await asyncio.sleep(3)
+        return machine
+
+    storage_machine, mounts_machine = await asyncio.gather(
+        create_machine(
+            constraints=juju.constraints.parse("mem=4G root-disk=20G virt-type=virtual-machine")
+        ),
+        create_machine(constraints=juju.constraints.parse("virt-type=virtual-machine")),
+    )
+
     # Deploy the charms and wait for active/idle status
     async with asyncio.TaskGroup() as tg:
         tg.create_task(
@@ -46,7 +69,7 @@ async def test_build_and_deploy(
                 "ubuntu",
                 application_name="ubuntu",
                 base="ubuntu@24.04",
-                constraints=juju.constraints.parse("virt-type=virtual-machine"),
+                to=mounts_machine.entity_id,
             )
         )
 
@@ -75,10 +98,13 @@ async def test_build_and_deploy(
                         str(nfs_server_proxy),
                         base=charm_base,
                         application_name=NFS_SERVER_PROXY,
+                        to=storage_machine.entity_id,
                     ),
                 )
 
-            nfs_info, _ = await asyncio.gather(bootstrap_nfs_server(ops_test), deploy_charm())
+            nfs_info, _ = await asyncio.gather(
+                bootstrap_nfs_server(ops_test, storage_machine.entity_id), deploy_charm()
+            )
 
             await ops_test.model.applications[NFS_SERVER_PROXY].set_config(
                 {"hostname": nfs_info.hostname, "path": nfs_info.path}
@@ -95,10 +121,11 @@ async def test_build_and_deploy(
                     str(cephfs_server_proxy),
                     base=charm_base,
                     application_name=CEPHFS_SERVER_PROXY,
+                    to=storage_machine.entity_id,
                 )
 
             cephfs_info, _ = await asyncio.gather(
-                bootstrap_microceph(ops_test),
+                bootstrap_microceph(ops_test, storage_machine.entity_id),
                 deploy_charm(),
             )
 
@@ -122,7 +149,7 @@ async def test_build_and_deploy(
                 # bootstrapping finishes and their config is set.
                 raise_on_blocked=False,
                 raise_on_error=True,
-                timeout=1000,
+                timeout=5000,
             )
         )
 
@@ -136,7 +163,7 @@ async def test_build_and_deploy(
                         str(test_mount_client),
                         base=charm_base,
                         application_name=app,
-                        constraints=juju.constraints.parse("virt-type=virtual-machine"),
+                        to=mounts_machine.entity_id,
                     )
                 )
 
@@ -268,6 +295,6 @@ async def test_cephfs(ops_test: OpsTest) -> None:
         )
 
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(check_files(ops_test.model.applications["ubuntu"].units[0], "/nfs"))
+        tg.create_task(check_files(ops_test.model.applications["ubuntu"].units[0], "/cephfs"))
         for app in MOUNT_REQUIRERS:
             tg.create_task(check_files(ops_test.model.applications[app].units[0], f"/{app}"))

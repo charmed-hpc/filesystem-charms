@@ -11,9 +11,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 FILESYSTEM_CLIENT_DIR = (
-    Path(filesystem_client)
-    if (filesystem_client := os.getenv("FILESYSTEM_CLIENT_DIR"))
-    else None
+    Path(filesystem_client) if (filesystem_client := os.getenv("FILESYSTEM_CLIENT_DIR")) else None
 )
 NFS_SERVER_PROXY_DIR = (
     Path(nfs_server_proxy) if (nfs_server_proxy := os.getenv("NFS_SERVER_PROXY_DIR")) else None
