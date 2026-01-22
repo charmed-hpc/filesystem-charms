@@ -39,11 +39,11 @@ variable "config" {
 variable "constraints" {
   description = "Deployment constraints"
   type        = string
-  default     = "arch=amd64"
+  default     = ""
 }
 
-variable "model_name" {
-  description = "Model name"
+variable "model_uuid" {
+  description = "Model UUID"
   type        = string
 }
 

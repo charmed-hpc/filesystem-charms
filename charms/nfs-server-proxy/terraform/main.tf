@@ -13,8 +13,8 @@
 # limitations under the License.
 
 resource "juju_application" "nfs-server-proxy" {
-  name  = var.app_name
-  model = var.model_name
+  name       = var.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "nfs-server-proxy"
