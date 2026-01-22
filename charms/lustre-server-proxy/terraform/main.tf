@@ -13,8 +13,8 @@
 # limitations under the License.
 
 resource "juju_application" "lustre-server-proxy" {
-  name  = var.app_name
-  model = var.model_name
+  name       = var.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "lustre-server-proxy"

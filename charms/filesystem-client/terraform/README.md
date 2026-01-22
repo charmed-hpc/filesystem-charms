@@ -23,7 +23,7 @@ This module offers the following configurable units:
 | `base`        | string      | Base version to use for deployed machine                 | ubuntu@24.04      |          |
 | `channel`     | string      | Channel that charm is deployed from                      | latest/edge       |          |
 | `config`      | map(string) | Map of charm configuration options to pass at deployment | {}                |          |
-| `model_name`  | string      | Name of the model to deploy the charm to                 |                   |    Y     |
+| `model_uuid`  | string      | UUID of the model to deploy the charm to                 |                   |    Y     |
 | `revision`    | number      | Revision number of charm to deploy                       | null              |          |
 
 ### Outputs
@@ -44,5 +44,5 @@ To deploy this module with its required dependency, you can run
 the following command:
 
 ```shell
-terraform apply -var="model_name=<MODEL_NAME>" -auto-approve
+terraform apply -var="model_uuid=<MODEL_UUID>" -auto-approve
 ```
