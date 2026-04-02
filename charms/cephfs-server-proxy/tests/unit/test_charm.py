@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 """Test base charm events such as Install, ConfigChanged, etc."""
 
 from charm import CephFSServerProxyCharm
-from ops import testing
-
 from charms.filesystem_client.v0.filesystem_info import CephfsInfo
+from ops import testing
 
 
 def test_config_missing_all():

@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Helpers for integration tests."""
@@ -10,11 +10,10 @@ from collections.abc import Awaitable
 from pathlib import Path
 
 import juju
+from charms.filesystem_client.v0.filesystem_info import CephfsInfo, NfsInfo
 from juju import machine
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-from charms.filesystem_client.v0.filesystem_info import CephfsInfo, NfsInfo
 
 _logger = logging.getLogger(__name__)
 

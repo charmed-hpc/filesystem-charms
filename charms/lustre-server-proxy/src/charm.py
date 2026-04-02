@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Lustre server proxy charm operator for mount non-charmed Lustre shares."""
@@ -8,7 +8,6 @@ import logging
 from typing import cast
 
 import ops
-
 from charms.filesystem_client.v0.filesystem_info import FilesystemProvides, LustreInfo
 
 logger = logging.getLogger(__name__)

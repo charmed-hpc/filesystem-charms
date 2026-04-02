@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm for the filesystem client."""
@@ -8,10 +8,9 @@ import logging
 from typing import cast
 
 import ops
-from utils.manager import MountsManager
-
 from charms.filesystem_client.v0.filesystem_info import FilesystemRequires
 from charms.filesystem_client.v0.mount_info import MountInfo, MountProvides
+from utils.manager import MountsManager
 
 _logger = logging.getLogger(__name__)
 

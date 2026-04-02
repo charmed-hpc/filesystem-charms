@@ -14,7 +14,6 @@ from ipaddress import AddressValueError, IPv6Address
 
 import ops
 from charmlibs import apt, systemd
-
 from charms.filesystem_client.v0.filesystem_info import (
     CephfsInfo,
     FilesystemInfo,

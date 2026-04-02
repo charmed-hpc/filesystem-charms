@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Operator to test the `mount_info` interface."""
@@ -8,9 +8,8 @@ import logging
 from typing import cast
 
 import ops
-from ops.framework import EventBase
-
 from charms.filesystem_client.v0.mount_info import MountInfo, MountRequires
+from ops.framework import EventBase
 
 logger = logging.getLogger(__name__)
 

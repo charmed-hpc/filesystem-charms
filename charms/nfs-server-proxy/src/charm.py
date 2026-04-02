@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2023-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """NFS server proxy charm operator for mount non-charmed NFS shares."""
@@ -8,7 +8,6 @@ import logging
 from typing import cast
 
 import ops
-
 from charms.filesystem_client.v0.filesystem_info import FilesystemProvides, NfsInfo
 
 logger = logging.getLogger(__name__)

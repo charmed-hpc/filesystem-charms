@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm the application."""
@@ -8,7 +8,6 @@ import logging
 from typing import cast
 
 import ops
-
 from charms.filesystem_client.v0.filesystem_info import CephfsInfo, FilesystemProvides
 
 logger = logging.getLogger(__name__)

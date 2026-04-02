@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Test the filesystem_info charm library."""
 
 import pytest
-from ops import CharmBase
-
 from charms.filesystem_client.v0.filesystem_info import (
     FilesystemRequires,
     _hostinfo,
 )
+from ops import CharmBase
 
 FS_INTEGRATION_NAME = "filesystem"
 FS_INTEGRATION_INTERFACE = "filesystem_info"

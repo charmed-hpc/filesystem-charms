@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2025-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Test the mount_info charm library."""
@@ -9,9 +9,8 @@ from dataclasses import asdict
 
 import ops
 import pytest
-from ops import testing
-
 from charms.filesystem_client.v0.mount_info import MountInfo, MountProvides, MountRequires
+from ops import testing
 
 MOUNT_RELATION_NAME = "mount"
 MOUNT_RELATION_INTERFACE = "mount_info"
