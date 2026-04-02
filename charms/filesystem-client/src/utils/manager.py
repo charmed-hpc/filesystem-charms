@@ -1,4 +1,4 @@
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Manage machine mounts and dependencies."""
@@ -13,9 +13,8 @@ from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
 
 import ops
+from charmlibs import apt, systemd
 
-import charms.operator_libs_linux.v0.apt as apt
-import charms.operator_libs_linux.v1.systemd as systemd
 from charms.filesystem_client.v0.filesystem_info import (
     CephfsInfo,
     FilesystemInfo,

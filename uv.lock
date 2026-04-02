@@ -119,6 +119,27 @@ wheels = [
 ]
 
 [[package]]
+name = "charmlibs-apt"
+version = "1.0.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/58/33e87779fdbcf62a3b34e3444d7175c1168b4b2726cc29c98849c09ac086/charmlibs_apt-1.0.0.post0.tar.gz", hash = "sha256:9c2e0b3c1f553ebcaae99c9aad72e15383aec56677a8dd3f6479dc6f084189a6", size = 31942, upload-time = "2025-10-15T02:40:29.521Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/92/4db19cd8bc94db51a115f7a2e3c46d96b991ca7ebe27207beac9a6570bc6/charmlibs_apt-1.0.0.post0-py3-none-any.whl", hash = "sha256:958e84719eb1feff539f058dc6c7af648c53c88b9ebe7c6157ec8d2bdf5fbfc6", size = 19287, upload-time = "2025-10-15T02:40:27.756Z" },
+]
+
+[[package]]
+name = "charmlibs-systemd"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/3d/234da07da24ec5ae37184e6b05eeccb994f4e786829cd8efe15b3dff45ee/charmlibs_systemd-1.0.0.tar.gz", hash = "sha256:947e93b076e105509b190020ec16de051e9015c1eb12904192fb39489e0e1caa", size = 15746, upload-time = "2025-11-26T21:32:08.399Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/2e/5fe4d18e52df0fedbf4c4a9e1f6fe0f93f11611a670afb26f808cfd44208/charmlibs_systemd-1.0.0-py3-none-any.whl", hash = "sha256:37d4022e28f70f7a2a54fbff7c5694d25dc62dbb8680feffabde8c324a432199", size = 4904, upload-time = "2025-11-26T21:32:07.103Z" },
+]
+
+[[package]]
 name = "charset-normalizer"
 version = "3.4.7"
 source = { registry = "https://pypi.org/simple" }
@@ -247,17 +268,25 @@ name = "filesystem-client"
 version = "0.0"
 source = { virtual = "charms/filesystem-client" }
 dependencies = [
+    { name = "charmlibs-apt" },
+    { name = "charmlibs-systemd" },
     { name = "ops" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "ops" }]
+requires-dist = [
+    { name = "charmlibs-apt" },
+    { name = "charmlibs-systemd" },
+    { name = "ops" },
+]
 
 [[package]]
 name = "filesystems"
 version = "0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "charmlibs-apt" },
+    { name = "charmlibs-systemd" },
     { name = "ops" },
 ]
 
@@ -277,6 +306,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "charmlibs-apt", specifier = "~=1.0" },
+    { name = "charmlibs-systemd", specifier = "~=1.0" },
     { name = "codespell", marker = "extra == 'dev'" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "juju", marker = "extra == 'dev'", specifier = "~=3.3" },

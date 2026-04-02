@@ -3,7 +3,9 @@ name = "filesystems"
 version = "0.0"
 requires-python = "==3.12.*"
 dependencies = [
-    "ops ~= 3.0"
+    "ops ~= 3.0",
+    "charmlibs-apt ~= 1.0",
+    "charmlibs-systemd ~= 1.0"
 ]
 
 [project.optional-dependencies]
@@ -29,10 +31,6 @@ dev = [
 members = ["charms/*"]
 
 [tool.repository]
-external-libraries = [
-    { lib = "operator-libs-linux.apt", version = "0.16" },
-    { lib = "operator-libs-linux.systemd", version = "1.4" },
-]
 
 # Testing tools configuration
 [tool.coverage.run]
