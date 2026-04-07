@@ -9,7 +9,11 @@ from dataclasses import asdict
 
 import ops
 import pytest
-from charms.filesystem_client.v0.mount_info import MountInfo, MountProvides, MountRequires
+from charms.filesystem_client.v0.mount_info import (
+    MountInfo,
+    MountProvides,
+    MountRequires,
+)
 from ops import testing
 
 MOUNT_RELATION_NAME = "mount"
@@ -17,13 +21,19 @@ MOUNT_RELATION_INTERFACE = "mount_info"
 MOUNT_CLIENT_METADATA = {
     "name": "mount-client",
     "requires": {
-        MOUNT_RELATION_NAME: {"interface": MOUNT_RELATION_INTERFACE, "scope": "container"}
+        MOUNT_RELATION_NAME: {
+            "interface": MOUNT_RELATION_INTERFACE,
+            "scope": "container",
+        }
     },
 }
 MOUNT_PROVIDER_METADATA = {
     "name": "mount-provider",
     "provides": {
-        MOUNT_RELATION_NAME: {"interface": MOUNT_RELATION_INTERFACE, "scope": "container"}
+        MOUNT_RELATION_NAME: {
+            "interface": MOUNT_RELATION_INTERFACE,
+            "scope": "container",
+        }
     },
     "subordinate": True,
 }
@@ -64,7 +74,8 @@ class MountRequirerCharm(ops.CharmBase):
         self.framework.observe(self.mount.on.mounted_filesystem, self._on_mounted_filesystem)
         self.framework.observe(self.mount.on.unmounted_filesystem, self._on_unmounted_filesystem)
         self.framework.observe(
-            self.mount.on.mount_provider_disconnected, self._on_mount_provider_disconnected
+            self.mount.on.mount_provider_disconnected,
+            self._on_mount_provider_disconnected,
         )
 
     def _on_mount_provider_connected(self, _) -> None:
@@ -111,7 +122,9 @@ def test_provider_mount_requested(mount_provider_ctx: testing.Context):
 def test_provider_mount_unrequested(mount_provider_ctx: testing.Context):
     """Test handler when the mount client has removed the mount info."""
     rel = testing.SubordinateRelation(
-        endpoint=MOUNT_RELATION_NAME, interface=MOUNT_RELATION_INTERFACE, remote_app_data={}
+        endpoint=MOUNT_RELATION_NAME,
+        interface=MOUNT_RELATION_INTERFACE,
+        remote_app_data={},
     )
     state_in = testing.State(relations={rel})
     ctx = mount_provider_ctx

@@ -5,89 +5,86 @@
 
 import json
 import logging
+import re
 import textwrap
-from collections.abc import Awaitable
 from pathlib import Path
 
-import juju
+import jubilant
 from charms.filesystem_client.v0.filesystem_info import CephfsInfo, NfsInfo
-from juju import machine
-from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 _logger = logging.getLogger(__name__)
+
+DEFAULT_CHARM_CHANNEL = "latest/edge"
 
 CEPH_FS_NAME = "cephfs"
 CEPH_USERNAME = "fs-client"
 CEPH_PATH = "/"
 
 
-async def _exec_cmd(machine: machine.Machine, cmd: str) -> str:
-    _logger.info("Executing `%s`", cmd)
-    stdout = await machine.ssh(f"sudo bash -c '{cmd.replace("'", "'\\''")}'", wait_for_active=True)
-    if stdout:
-        _logger.info("stdout: %s", stdout)
+def add_machine(juju: jubilant.Juju, constraints: str) -> str:
+    """Add a Juju machine with the given constraints and return its ID.
 
-    return stdout
+    Blocks until the machine reaches "started" status.
+    """
+    # `add-machine` writes its output to stderr.
+    _stdout, stderr = juju._cli("add-machine", "--constraints", constraints)
+    match = re.search(r"(\d+)", stderr)
+    if not match:
+        raise RuntimeError(f"Could not parse machine ID from output: {stderr!r}")
+    machine_id = match.group(1)
 
-
-async def _exec_cmds(machine: machine.Machine, cmds: [str]) -> None:
-    for cmd in cmds:
-        await _exec_cmd(machine, cmd)
-
-
-async def build_and_deploy_charm(
-    ops_test: OpsTest, charm: Awaitable[str | Path], *deploy_args, **deploy_kwargs
-):
-    """Build and deploy the charm identified by `charm`."""
-    charm = await charm
-    deploy_kwargs["channel"] = "edge" if isinstance(charm, str) else None
-    await ops_test.model.deploy(str(charm), *deploy_args, **deploy_kwargs)
+    juju.wait(
+        lambda status: (
+            machine_id in status.machines
+            and status.machines[machine_id].juju_status.current == "started"
+        ),
+    )
+    return machine_id
 
 
-async def bootstrap_nfs_server(ops_test: OpsTest, machine_id: str) -> NfsInfo:
+def charm_channel(charm: str | Path) -> str | None:
+    """Return the default channel when deploying from Charmhub, None for local charms."""
+    return DEFAULT_CHARM_CHANNEL if isinstance(charm, str) else None
+
+
+def bootstrap_nfs_server(juju: jubilant.Juju, machine_id: str) -> NfsInfo:
     """Bootstrap a minimal NFS kernel server in Juju.
 
     Returns:
         NfsInfo: Information to mount the NFS share.
     """
-    await ops_test.model.deploy(
-        "ubuntu", application_name="nfs-server", base="ubuntu@24.04", to=machine_id
-    )
-    await ops_test.model.wait_for_idle(
-        apps=["nfs-server"],
-        status="active",
+    juju.deploy("ubuntu", "nfs-server", base="ubuntu@24.04", to=machine_id)
+    juju.wait(
+        lambda status: jubilant.all_active(status, "nfs-server"),
         timeout=1000,
     )
 
-    machine = ops_test.model.applications["nfs-server"].units[0].machine
+    unit = "nfs-server/0"
 
-    await _exec_cmd(machine, "apt -y install nfs-kernel-server")
+    juju.exec("sudo apt -y install nfs-kernel-server", unit=unit)
 
-    exports = textwrap.dedent(
-        """
+    exports = textwrap.dedent("""
         /data    *(rw,sync,no_subtree_check,no_root_squash)
-        """
-    ).strip("\n")
-    _logger.info(f"Uploading the following /etc/exports file:\n{exports}")
-    await _exec_cmd(machine, f'echo -e "{exports.replace("\n", "\\n")}" > /etc/exports')
+        """).strip("\n")
+    _logger.info("Uploading the following /etc/exports file:\n%s", exports)
+    escaped_exports = exports.replace(chr(10), "\\n")
+    juju.exec(f"sudo bash -c 'echo -e \"{escaped_exports}\" > /etc/exports'", unit=unit)
+
     _logger.info("Starting NFS server")
-    await _exec_cmds(
-        machine,
-        [
-            "mkdir -p /data",
-            "exportfs -a",
-            "systemctl restart nfs-kernel-server",
-        ],
-    )
+    juju.exec("sudo mkdir -p /data", unit=unit)
+    juju.exec("sudo exportfs -a", unit=unit)
+    juju.exec("sudo systemctl restart nfs-kernel-server", unit=unit)
+
     for i in [1, 2, 3]:
-        await _exec_cmd(machine, f"touch /data/test-{i}")
-    address = (await _exec_cmd(machine, "hostname")).strip()
-    _logger.info(f"NFS share endpoint is nfs://{address}/data")
+        juju.exec(f"sudo touch /data/test-{i}", unit=unit)
+
+    address = juju.exec("hostname", unit=unit).stdout.strip()
+    _logger.info("NFS share endpoint is nfs://%s/data", address)
     return NfsInfo(hostname=address, port=None, path="/data")
 
 
-async def bootstrap_microceph(ops_test: OpsTest, machine_id: str) -> CephfsInfo:
+def bootstrap_microceph(juju: jubilant.Juju, machine_id: str) -> CephfsInfo:
     """Bootstrap a minimal Microceph cluster in Juju.
 
     Returns:
@@ -95,62 +92,76 @@ async def bootstrap_microceph(ops_test: OpsTest, machine_id: str) -> CephfsInfo:
     """
     _logger.info("Bootstrapping Microceph cluster")
 
-    await ops_test.model.deploy(
+    juju.deploy(
         "microceph",
-        application_name="microceph",
+        "microceph",
         base="ubuntu@24.04",
         channel="squid/beta",
         num_units=1,
-        storage={"osd-standalone": juju.constraints.parse_storage_constraint("loop,3,1G")},
+        storage={"osd-standalone": "loop,3,1G"},
         to=machine_id,
     )
-    await ops_test.model.wait_for_idle(
-        apps=["microceph"],
-        status="active",
+    juju.wait(
+        lambda status: jubilant.all_active(status, "microceph"),
         timeout=5000,
     )
 
-    machine = ops_test.model.applications["microceph"].units[0].machine
+    unit = "microceph/0"
 
-    await _wait_for_ceph(machine)
+    _wait_for_ceph(juju, unit)
 
-    await _exec_cmds(
-        machine,
-        [
-            "ln -s /bin/true",
-            "apt install -y ceph-common",
-            f"microceph.ceph osd pool create {CEPH_FS_NAME}_data",
-            f"microceph.ceph osd pool create {CEPH_FS_NAME}_metadata",
-            f"microceph.ceph fs new {CEPH_FS_NAME} {CEPH_FS_NAME}_metadata {CEPH_FS_NAME}_data",
-            f"microceph.ceph fs authorize {CEPH_FS_NAME} client.{CEPH_USERNAME} {CEPH_PATH} rw",
-            "ln -sf /var/snap/microceph/current/conf/ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring",
-            "ln -sf /var/snap/microceph/current/conf/ceph.keyring /etc/ceph/ceph.keyring",
-            "ln -sf /var/snap/microceph/current/conf/ceph.conf /etc/ceph/ceph.conf",
-        ],
+    juju.exec("sudo ln -s /bin/true", unit=unit)
+    juju.exec("sudo apt install -y ceph-common", unit=unit)
+    juju.exec(f"microceph.ceph osd pool create {CEPH_FS_NAME}_data", unit=unit)
+    juju.exec(f"microceph.ceph osd pool create {CEPH_FS_NAME}_metadata", unit=unit)
+    juju.exec(
+        f"microceph.ceph fs new {CEPH_FS_NAME} {CEPH_FS_NAME}_metadata {CEPH_FS_NAME}_data",
+        unit=unit,
+    )
+    juju.exec(
+        f"microceph.ceph fs authorize {CEPH_FS_NAME} client.{CEPH_USERNAME} {CEPH_PATH} rw",
+        unit=unit,
+    )
+    juju.exec(
+        "sudo ln -sf /var/snap/microceph/current/conf/ceph.client.admin.keyring"
+        " /etc/ceph/ceph.client.admin.keyring",
+        unit=unit,
+    )
+    juju.exec(
+        "sudo ln -sf /var/snap/microceph/current/conf/ceph.keyring /etc/ceph/ceph.keyring",
+        unit=unit,
+    )
+    juju.exec(
+        "sudo ln -sf /var/snap/microceph/current/conf/ceph.conf /etc/ceph/ceph.conf",
+        unit=unit,
     )
 
-    await _wait_for_ceph(machine)
-    await _exec_cmd(machine, f"mount -t ceph admin@.{CEPH_FS_NAME}={CEPH_PATH} /mnt")
+    _wait_for_ceph(juju, unit)
+    juju.exec(f"sudo mount -t ceph admin@.{CEPH_FS_NAME}={CEPH_PATH} /mnt", unit=unit)
 
     for i in [1, 2, 3]:
-        await _exec_cmd(machine, f"touch /mnt/test-{i}")
+        juju.exec(f"sudo touch /mnt/test-{i}", unit=unit)
 
-    return await _get_cephfs_info(machine)
+    return _get_cephfs_info(juju, unit)
 
 
 @retry(wait=wait_exponential(max=10), stop=stop_after_attempt(20))
-async def _wait_for_ceph(machine: machine.Machine) -> None:
-    # Wait until the cluster is ready to mount the filesystem.
-    status = json.loads(await _exec_cmd(machine, "microceph.ceph -s -f json"))
+def _wait_for_ceph(juju: jubilant.Juju, unit: str) -> None:
+    """Wait until the Ceph cluster is ready."""
+    result = juju.exec("microceph.ceph -s -f json", unit=unit)
+    status = json.loads(result.stdout)
     if status["health"]["status"] != "HEALTH_OK":
         raise Exception("CephFS is not available")
 
 
-async def _get_cephfs_info(machine: machine.Machine) -> CephfsInfo:
-    status = json.loads(await _exec_cmd(machine, "microceph.ceph -s -f json"))
+def _get_cephfs_info(juju: jubilant.Juju, unit: str) -> CephfsInfo:
+    """Gather CephFS connection info from the Microceph unit."""
+    result = juju.exec("microceph.ceph -s -f json", unit=unit)
+    status = json.loads(result.stdout)
     fsid = status["fsid"]
-    host = (await _exec_cmd(machine, "hostname")).strip() + ":6789"
-    key = await _exec_cmd(machine, f"microceph.ceph auth print-key client.{CEPH_USERNAME}")
+
+    host = juju.exec("hostname", unit=unit).stdout.strip() + ":6789"
+    key = juju.exec(f"microceph.ceph auth print-key client.{CEPH_USERNAME}", unit=unit).stdout
 
     return CephfsInfo(
         fsid=fsid,

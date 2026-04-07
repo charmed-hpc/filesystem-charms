@@ -20,9 +20,8 @@ dev = [
   "ops[testing]",
 
   # Integration
-  "juju ~= 3.3",
-  "pytest ~= 7.2",
-  "pytest-operator ~= 0.34",
+  "jubilant",
+  "pytest",
   "pytest-order ~= 1.1",
   "tenacity ~= 8.2",
 ]
