@@ -8,19 +8,12 @@ import logging
 from typing import cast
 
 import ops
+from charmed_hpc_libs.ops import StopCharm, refresh
 from charms.filesystem_client.v0.filesystem_info import FilesystemRequires
 from charms.filesystem_client.v0.mount_info import MountInfo, MountProvides
 from utils.manager import MountsManager
 
 _logger = logging.getLogger(__name__)
-
-
-class StopCharmError(Exception):
-    """Exception raised when a method needs to finish the execution of the charm code."""
-
-    def __init__(self, status: ops.StatusBase, app: bool = False) -> None:
-        self.status = status
-        self.app = app
 
 
 # Trying to use a delta charm (one method per event) proved to be a bit unwieldy, since
@@ -52,55 +45,47 @@ class FilesystemClientCharm(ops.CharmBase):
         self.framework.observe(self._mount.on.mount_requested, self._handle_event)
         self.framework.observe(self._mount.on.mount_unrequested, self._handle_event)
 
+    @refresh()
     def _handle_event(self, event: ops.EventBase) -> None:
         """Handle a Juju event."""
-        try:
-            self.unit.status = ops.MaintenanceStatus("Updating status")
+        self._mount.set_mount_status(mounted=False)
+        self.unit.status = ops.MaintenanceStatus("Updating status")
 
-            # CephFS is not supported on LXD containers.
-            if not self._mounts_manager.supported():
-                self.unit.status = ops.BlockedStatus("Cannot mount filesystems on LXD containers")
-                return
+        if not self._mounts_manager.supported():
+            raise StopCharm(ops.BlockedStatus("Cannot mount filesystems on LXD containers"))
 
-            self._ensure_installed()
+        self._ensure_installed()
 
-            with self._mounts_manager.mounts() as mounts:
-                config = self._get_config()
-                endpoints = self._filesystem.endpoints
-                if not endpoints:
-                    raise StopCharmError(
-                        ops.BlockedStatus("Waiting for an integration with a filesystem provider"),
-                        app=True,
-                    )
+        with self._mounts_manager.mounts() as mounts:
+            config = self._get_config()
+            endpoints = self._filesystem.endpoints
+            if not endpoints:
+                raise StopCharm(
+                    ops.BlockedStatus("Waiting for an integration with a filesystem provider"),
+                    set_app_status=True,
+                )
 
-                # This is limited to 1 relation.
-                endpoint = endpoints[0]
+            # This is limited to 1 relation.
+            endpoint = endpoints[0]
 
-                if self.unit.is_leader():
-                    self.app.status = ops.ActiveStatus(
-                        f"Integrated with `{endpoint.info.filesystem_type()}` provider"
-                    )
+            if self.unit.is_leader():
+                self.app.status = ops.ActiveStatus(
+                    f"Integrated with `{endpoint.info.filesystem_type()}` provider"
+                )
 
-                self.unit.status = ops.MaintenanceStatus("Mounting filesystem")
+            self.unit.status = ops.MaintenanceStatus("Mounting filesystem")
 
-                opts = []
+            opts = []
 
-                opts.append("noexec" if config.noexec else "exec")
-                opts.append("nosuid" if config.nosuid else "suid")
-                opts.append("nodev" if config.nodev else "dev")
-                opts.append("ro" if config.read_only else "rw")
-                mounts.add(info=endpoint.info, mountpoint=config.mountpoint, options=opts)
+            opts.append("noexec" if config.noexec else "exec")
+            opts.append("nosuid" if config.nosuid else "suid")
+            opts.append("nodev" if config.nodev else "dev")
+            opts.append("ro" if config.read_only else "rw")
+            mounts.add(info=endpoint.info, mountpoint=config.mountpoint, options=opts)
 
-                self._mount.set_mount_status(mounted=True)
+            self.unit.status = ops.ActiveStatus(f"Mounted filesystem at `{config.mountpoint}`")
 
-                self.unit.status = ops.ActiveStatus(f"Mounted filesystem at `{config.mountpoint}`")
-        except StopCharmError as e:
-            self._mount.set_mount_status(mounted=False)
-            # This was the cleanest way to ensure the inner methods can still return prematurely
-            # when an error occurs.
-            self.unit.status = e.status
-            if self.unit.is_leader() and e.app:
-                self.app.status = e.status
+        self._mount.set_mount_status(mounted=True)
 
     def _ensure_installed(self) -> None:
         """Ensure the required packages are installed into the unit."""
@@ -116,33 +101,33 @@ class FilesystemClientCharm(ops.CharmBase):
         if not mountpoint:
             relation = next(relations, None)
             if not relation:
-                raise StopCharmError(
+                raise StopCharm(
                     ops.BlockedStatus("Missing `mountpoint` config or `mount` integration"),
-                    app=True,
+                    set_app_status=True,
                 )
 
             if next(relations, None):
-                raise StopCharmError(
+                raise StopCharm(
                     ops.BlockedStatus(
                         "Cannot mount using more than one relation at the same time"
                     ),
-                    app=True,
+                    set_app_status=True,
                 )
 
             mount_info = self._mount.mount_info(relation.id)
             if not mount_info:
-                raise StopCharmError(
+                raise StopCharm(
                     ops.WaitingStatus("Waiting for mountpoint from `mount` integration")
                 )
 
             return mount_info
 
         if next(relations, None):
-            raise StopCharmError(
+            raise StopCharm(
                 ops.BlockedStatus(
                     "Cannot mount using both the `mountpoint` config and the `mount` integration"
                 ),
-                app=True,
+                set_app_status=True,
             )
 
         return MountInfo(

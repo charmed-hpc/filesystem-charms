@@ -7,13 +7,14 @@ import contextlib
 import logging
 import os
 import pathlib
-import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
 
 import ops
-from charmlibs import apt, systemd
+from charmed_hpc_libs.errors import SystemdError, UnknownVirtualizationStateError
+from charmed_hpc_libs.ops import is_container, systemctl
+from charmlibs import apt
 from charms.filesystem_client.v0.filesystem_info import (
     CephfsInfo,
     FilesystemInfo,
@@ -150,15 +151,8 @@ class MountsManager:
     def supported(self) -> bool:
         """Check if underlying base supports mounting shares."""
         try:
-            result = subprocess.run(
-                ["systemd-detect-virt"], stdout=subprocess.PIPE, check=True, text=True
-            )
-            if "lxc" in result.stdout:
-                # Cannot mount shares inside LXD containers.
-                return False
-            else:
-                return True
-        except subprocess.CalledProcessError:
+            return not is_container()
+        except UnknownVirtualizationStateError:
             _logger.warning("could not detect execution in virtualized environment")
             return True
 
@@ -193,8 +187,8 @@ class MountsManager:
             for mount in mounts._mounts.keys():
                 pathlib.Path(mount).mkdir(parents=True, exist_ok=True)
             self._autofs_file.write_text(new_autofs)
-            systemd.service_reload("autofs", restart_on_failure=True)
-        except systemd.SystemdError as e:
+            systemctl("reload-or-restart", "autofs", check=True)
+        except SystemdError as e:
             _logger.error("failed to mount filesystems", exc_info=e)
             raise Error("failed to mount filesystems")
 

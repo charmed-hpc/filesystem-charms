@@ -2,6 +2,6 @@
 name = "filesystem-client"
 version = "0.0"
 requires-python = "==3.12.*"
-dependencies = ["ops", "charmlibs-apt", "charmlibs-systemd"]
+dependencies = ["ops", "charmlibs-apt", "charmed-hpc-libs[ops]"]
 
 [tool.repository]
