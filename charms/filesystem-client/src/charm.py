@@ -51,41 +51,48 @@ class FilesystemClientCharm(ops.CharmBase):
         self._mount.set_mount_status(mounted=False)
         self.unit.status = ops.MaintenanceStatus("Updating status")
 
-        if not self._mounts_manager.supported():
-            raise StopCharm(ops.BlockedStatus("Cannot mount filesystems on LXD containers"))
+        try:
+            if not self._mounts_manager.supported():
+                raise StopCharm(ops.BlockedStatus("Cannot mount filesystems on LXD containers"))
 
-        self._ensure_installed()
+            self._ensure_installed()
 
-        with self._mounts_manager.mounts() as mounts:
-            config = self._get_config()
-            endpoints = self._filesystem.endpoints
-            if not endpoints:
-                raise StopCharm(
-                    ops.BlockedStatus("Waiting for an integration with a filesystem provider"),
-                    set_app_status=True,
-                )
+            with self._mounts_manager.mounts() as mounts:
+                config = self._get_config()
+                endpoints = self._filesystem.endpoints
+                if not endpoints:
+                    raise StopCharm(
+                        ops.BlockedStatus("Waiting for an integration with a filesystem provider"),
+                        set_app_status=True,
+                    )
 
-            # This is limited to 1 relation.
-            endpoint = endpoints[0]
+                # This is limited to 1 relation.
+                endpoint = endpoints[0]
 
-            if self.unit.is_leader():
-                self.app.status = ops.ActiveStatus(
-                    f"Integrated with `{endpoint.info.filesystem_type()}` provider"
-                )
+                if self.unit.is_leader():
+                    self.app.status = ops.ActiveStatus(
+                        f"Integrated with `{endpoint.info.filesystem_type()}` provider"
+                    )
 
-            self.unit.status = ops.MaintenanceStatus("Mounting filesystem")
+                self.unit.status = ops.MaintenanceStatus("Mounting filesystem")
 
-            opts = []
+                opts = []
+                opts.append("noexec" if config.noexec else "exec")
+                opts.append("nosuid" if config.nosuid else "suid")
+                opts.append("nodev" if config.nodev else "dev")
+                opts.append("ro" if config.read_only else "rw")
+                mounts.add(info=endpoint.info, mountpoint=config.mountpoint, options=opts)
 
-            opts.append("noexec" if config.noexec else "exec")
-            opts.append("nosuid" if config.nosuid else "suid")
-            opts.append("nodev" if config.nodev else "dev")
-            opts.append("ro" if config.read_only else "rw")
-            mounts.add(info=endpoint.info, mountpoint=config.mountpoint, options=opts)
+                self.unit.status = ops.ActiveStatus(f"Mounted filesystem at `{config.mountpoint}`")
 
-            self.unit.status = ops.ActiveStatus(f"Mounted filesystem at `{config.mountpoint}`")
-
-        self._mount.set_mount_status(mounted=True)
+            self._mount.set_mount_status(mounted=True)
+        except StopCharm:
+            raise
+        except Exception:
+            _logger.error("unexpected error while handling event", exc_info=True)
+            raise StopCharm(
+                ops.BlockedStatus("Failed to mount filesystems. See `juju debug-log` for details")
+            )
 
     def _ensure_installed(self) -> None:
         """Ensure the required packages are installed into the unit."""
