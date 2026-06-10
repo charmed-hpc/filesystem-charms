@@ -59,3 +59,7 @@ config:
       default: false
       description: Mount filesystem as read-only.
       type: boolean
+    enable-lustre:
+      default: false
+      description: Enable support for mounting Lustre filesystems.
+      type: boolean

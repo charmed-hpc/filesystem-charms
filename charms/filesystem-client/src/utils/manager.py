@@ -4,9 +4,12 @@
 """Manage machine mounts and dependencies."""
 
 import contextlib
+import json
 import logging
 import os
 import pathlib
+import platform
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
@@ -18,7 +21,16 @@ from charmlibs import apt
 from charms.filesystem_client.v0.filesystem_info import (
     CephfsInfo,
     FilesystemInfo,
+    LustreInfo,
     NfsInfo,
+)
+
+from utils.constants import (
+    BASE_PACKAGES,
+    LUSTRE_LNET_CONF,
+    LUSTRE_PACKAGES,
+    LUSTRE_REPOSITORY_KEY,
+    LUSTRE_REPOSITORY_URI,
 )
 
 _logger = logging.getLogger(__name__)
@@ -67,8 +79,9 @@ class _MountInfo:
 class Mounts:
     """Collection of mounts that need to be managed by the `MountsManager`."""
 
-    def __init__(self) -> None:
+    def __init__(self, enable_lustre: bool) -> None:
         self._mounts: dict[str, _MountInfo] = {}
+        self._lustre = enable_lustre
 
     def add(
         self,
@@ -80,6 +93,7 @@ class Mounts:
 
         Args:
             info: Share information required to mount the share.
+            enable_lustre: Enable support for mounting Lustre filesystems.
             mountpoint: System location to mount the share.
             options: Mount options to pass when mounting the share.
 
@@ -89,7 +103,7 @@ class Mounts:
         if options is None:
             options = []
 
-        endpoint, additional_opts = _get_endpoint_and_opts(info)
+        endpoint, additional_opts = _get_endpoint_and_opts(info, self._lustre)
         options = sorted(options + additional_opts)
 
         self._mounts[str(mountpoint)] = _MountInfo(endpoint=endpoint, options=options)
@@ -104,37 +118,77 @@ class MountsManager:
         self._pkgs = None
         self._master_file = pathlib.Path(f"/etc/auto.master.d/{unit_id}.autofs")
         self._autofs_file = pathlib.Path(f"/etc/auto.{unit_id}")
+        self.enable_lustre = False
 
-    @property
     def _packages(self) -> list[apt.DebianPackage]:
         """List of packages required by the client."""
-        if not self._pkgs:
-            self._pkgs = [
-                apt.DebianPackage.from_system(pkg)
-                for pkg in ["ceph-common", "nfs-common", "autofs"]
-            ]
+        if not self.enable_lustre:
+            if self._pkgs:
+                return self._pkgs
+
+            self._pkgs = [apt.DebianPackage.from_system(pkg) for pkg in BASE_PACKAGES]
+
+            return self._pkgs
+
+        if self._pkgs and any(pkg.name in LUSTRE_PACKAGES for pkg in self._pkgs):
+            return self._pkgs
+
+        repositories = apt.RepositoryMapping()
+
+        try:
+            release = platform.freedesktop_os_release()["VERSION_CODENAME"]
+        except KeyError as e:
+            _logger.error(
+                "failed to determine Ubuntu version codename to configure Lustre repository",
+                exc_info=e,
+            )
+            raise Error(str(e))
+
+        try:
+            repo = apt.DebianRepository(
+                enabled=True,
+                repotype="deb",
+                uri=LUSTRE_REPOSITORY_URI,
+                release=release,
+                groups=["main"],
+                filename="lustre-repo",
+            )
+            repo.import_key(LUSTRE_REPOSITORY_KEY)
+            # adding the debian repository should have idempotent semantics.
+            repositories.add(repo)
+            apt.update()
+        except (apt.GPGKeyError, subprocess.CalledProcessError) as e:
+            _logger.error("failed to add %s package repository", LUSTRE_REPOSITORY_URI, exc_info=e)
+            raise Error(str(e))
+
+        self._pkgs = [
+            apt.DebianPackage.from_system(pkg) for pkg in BASE_PACKAGES + LUSTRE_PACKAGES
+        ]
+
         return self._pkgs
 
-    @property
-    def installed(self) -> bool:
-        """Check if the required packages are installed."""
-        for pkg in self._packages:
+    def is_setup(self) -> bool:
+        """Check if the system is set up ."""
+        for pkg in self._packages():
             if not pkg.present:
                 return False
 
         if not self._master_file.exists() or not self._autofs_file.exists():
             return False
 
-        return True
+        if not self.enable_lustre:
+            return True
 
-    def install(self) -> None:
-        """Install the required mount packages.
+        return LUSTRE_LNET_CONF.exists()
+
+    def setup(self) -> None:
+        """Set up the system to mount filesystems.
 
         Raises:
-            Error: Raised if this failed to change the state of any of the required packages.
+            Error: Raised if this failed to set up the system.
         """
         try:
-            for pkg in self._packages:
+            for pkg in self._packages():
                 pkg.ensure(apt.PackageState.Present)
         except (apt.PackageError, apt.PackageNotFoundError) as e:
             _logger.error("failed to change the state of the required packages", exc_info=e)
@@ -146,7 +200,35 @@ class MountsManager:
             self._master_file.write_text(f"/- {self._autofs_file}")
         except IOError as e:
             _logger.error("failed to create the required autofs files", exc_info=e)
-            raise Error("failed to create the required autofs files")
+            raise Error(str(e))
+
+        if not self.enable_lustre:
+            return
+
+        # Enable LNet on default network interface if not already enabled.
+        interface = _get_default_interface()
+        # TODO: Add InfiniBand support. MVP is scoped to TCP for now.
+        try:
+            result = subprocess.run(["lnetctl", "net", "show", "--net", "tcp"])
+            if result.returncode != 0:
+                # Command failed to get the tcp network. Need to create it.
+                subprocess.run(
+                    ["lnetctl", "net", "add", "--net", "tcp", "--if", interface], check=True
+                )
+
+            # TODO: might want to check if the tcp network is assigned to the
+            # correct interface?
+        except subprocess.CalledProcessError as e:
+            _logger.error("failed to setup lnet on the system", exc_info=e)
+            raise Error(str(e))
+
+        try:
+            # Persist changes.
+            result = subprocess.check_output(["lnetctl", "export", "--backup"], text=True)
+            LUSTRE_LNET_CONF.write_text(result)
+        except (subprocess.CalledProcessError, IOError) as e:
+            _logger.error("failed to write lnet configuration to the system", exc_info=e)
+            raise Error(str(e))
 
     def supported(self) -> bool:
         """Check if underlying base supports mounting shares."""
@@ -165,7 +247,7 @@ class MountsManager:
         added on previous executions will get removed if they're not added again
         to the `Mounts` object.
         """
-        mounts = Mounts()
+        mounts = Mounts(self.enable_lustre)
         yield mounts
         # This will not resume if the caller raised an exception, which
         # should be enough to ensure the file is not written if the charm entered
@@ -190,10 +272,10 @@ class MountsManager:
             systemctl("reload-or-restart", "autofs", check=True)
         except SystemdError as e:
             _logger.error("failed to mount filesystems", exc_info=e)
-            raise Error("failed to mount filesystems")
+            raise Error(str(e))
 
 
-def _get_endpoint_and_opts(info: FilesystemInfo) -> tuple[str, list[str]]:
+def _get_endpoint_and_opts(info: FilesystemInfo, enable_lustre: bool) -> tuple[str, list[str]]:
     match info:
         case NfsInfo(hostname=hostname, port=port, path=path):
             try:
@@ -217,7 +299,29 @@ def _get_endpoint_and_opts(info: FilesystemInfo) -> tuple[str, list[str]]:
                 f"mon_addr={mon_addr}",
                 f"secret={secret}",
             ]
+        case LustreInfo(mgs_ids=mgs_ids, fs_name=fs_name) if enable_lustre:
+            mgs_ids = ":".join(mgs_ids)
+            endpoint = f"{mgs_ids}:/{fs_name}"
+            options = ["fstype=lustre"]
+        case LustreInfo():
+            raise Error(
+                "mounting a lustre filesystem requires setting the `enable-lustre` config to true"
+            )
         case _:
             raise Error(f"unsupported filesystem type `{info.filesystem_type()}`")
 
     return endpoint, options
+
+
+def _get_default_interface():
+    """Return the default network interface name for this unit."""
+    try:
+        result = subprocess.check_output(["ip", "-json", "route", "show", "default"], text=True)
+        routes = json.loads(result)
+        return routes[0]["dev"]
+    except (json.JSONDecodeError, TypeError, subprocess.CalledProcessError) as e:
+        _logger.error("failed to get the default network interface", exc_info=e)
+        raise Error(str(e))
+    except (KeyError, IndexError) as e:
+        _logger.error("could not determine the default network interface name", exc_info=e)
+        raise Error(str(e))

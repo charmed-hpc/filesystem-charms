@@ -50,12 +50,13 @@ class FilesystemClientCharm(ops.CharmBase):
         """Handle a Juju event."""
         self._mount.set_mount_status(mounted=False)
         self.unit.status = ops.MaintenanceStatus("Updating status")
+        self._mounts_manager.enable_lustre = cast(bool, self.config.get("enable-lustre"))
 
         try:
             if not self._mounts_manager.supported():
                 raise StopCharm(ops.BlockedStatus("Cannot mount filesystems on LXD containers"))
 
-            self._ensure_installed()
+            self._ensure_setup()
 
             with self._mounts_manager.mounts() as mounts:
                 config = self._get_config()
@@ -94,11 +95,11 @@ class FilesystemClientCharm(ops.CharmBase):
                 ops.BlockedStatus("Failed to mount filesystems. See `juju debug-log` for details")
             )
 
-    def _ensure_installed(self) -> None:
-        """Ensure the required packages are installed into the unit."""
-        if not self._mounts_manager.installed:
-            self.unit.status = ops.MaintenanceStatus("Installing required packages")
-            self._mounts_manager.install()
+    def _ensure_setup(self) -> None:
+        """Ensure the manager is set up to mount filesystems."""
+        if not self._mounts_manager.is_setup():
+            self.unit.status = ops.MaintenanceStatus("Setting up the system")
+            self._mounts_manager.setup()
 
     def _get_config(self) -> MountInfo:
         """Get and validate the configuration of the charm."""

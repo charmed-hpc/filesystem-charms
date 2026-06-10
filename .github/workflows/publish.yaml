@@ -31,7 +31,11 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        charm: [filesystem-client, cephfs-server-proxy, nfs-server-proxy]
+        charm:
+          - filesystem-client
+          - cephfs-server-proxy
+          - nfs-server-proxy
+          - lustre-server-proxy
     steps:
       - name: Checkout
         uses: actions/checkout@v4

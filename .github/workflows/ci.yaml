@@ -15,9 +15,16 @@
 name: filesystem-client tests
 on:
   workflow_call:
+    inputs:
+      enable_lustre:
+        description: "Enable Lustre tests"
+        type: boolean
+        default: false
   pull_request:
     branches:
       - main
+  schedule:
+    - cron: "0 5 * * *" # 05:00 UTC nightly
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -127,4 +134,10 @@ jobs:
           provider: lxd
           juju-channel: 3.6/stable
       - name: Run tests
-        run: just repo integration
+        run: |
+          declare -a ARGS=()
+          # Only run Lustre tests nightly or if requested
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_lustre }}" == "true" ]]; then
+            ARGS+=("--run-lustre")
+          fi
+          just repo integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}

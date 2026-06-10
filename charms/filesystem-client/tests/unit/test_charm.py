@@ -31,18 +31,18 @@ def mock_mounts_manager() -> MagicMock:
 
 
 @pytest.mark.parametrize(
-    "installed", (pytest.param(True, id="installed"), pytest.param(False, id="not installed"))
+    "is_setup", (pytest.param(True, id="is setup"), pytest.param(False, id="is not setup"))
 )
 def test_manager_mounted_false_if_exc(
-    ctx: testing.Context, installed: bool, mock_mounts_manager: MagicMock
+    ctx: testing.Context, is_setup: bool, mock_mounts_manager: MagicMock
 ) -> None:
     """mounted=false is written in the case of a raised exception."""
     mount_rel = testing.SubordinateRelation(endpoint="mount")
     state_in = testing.State(relations={mount_rel})
 
     mock_mounts_manager.supported.return_value = True
-    mock_mounts_manager.installed = installed
-    mock_mounts_manager.install.side_effect = Error("apt failed")
+    mock_mounts_manager.is_setup.return_value = is_setup
+    mock_mounts_manager.setup.side_effect = Error("apt failed")
     mock_mounts_manager.mounts.side_effect = RuntimeError("unexpected")
 
     state_out = ctx.run(ctx.on.config_changed(), state_in)
@@ -73,10 +73,30 @@ def test_successful_mount_sets_mounted_true(
     )
 
     mock_mounts_manager.supported.return_value = True
-    mock_mounts_manager.installed = True
+    mock_mounts_manager.is_setup.return_value = True
     mock_mounts_manager.mounts = MagicMock()
 
     state_out = ctx.run(ctx.on.config_changed(), state_in)
 
     assert state_out.get_relation(mount_rel.id).local_unit_data["mounted"] == "true"
     assert state_out.unit_status == testing.ActiveStatus("Mounted filesystem at `/mnt/nfs`")
+
+
+@pytest.mark.parametrize(
+    "enable_lustre",
+    (pytest.param(True, id="lustre enabled"), pytest.param(False, id="lustre disabled")),
+)
+def test_enable_lustre_sets_manager_flag(
+    ctx: testing.Context, enable_lustre: bool, mock_mounts_manager: MagicMock
+) -> None:
+    """The enable-lustre config determines if the mount manager enables lustre support."""
+    state_in = testing.State(config={"enable-lustre": enable_lustre})
+    mock_mounts_manager.supported.return_value = True
+    mock_mounts_manager.is_setup.return_value = True
+    mock_mounts_manager.mounts = MagicMock()
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+    assert mock_mounts_manager.enable_lustre == enable_lustre
+    assert state_out.unit_status == testing.BlockedStatus(
+        "Missing `mountpoint` config or `mount` integration"
+    )

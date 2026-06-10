@@ -8,26 +8,23 @@ from pathlib import Path
 
 import jubilant
 import pytest
+from conftest import Machines
+from constants import (
+    CEPHFS_SERVER_PROXY,
+    CHARMS,
+    FILESYSTEM_CLIENT,
+    MOUNT_PROVIDER,
+    MOUNT_REQUIRERS,
+    NFS_SERVER_PROXY,
+)
 from helpers import (
-    add_machine,
     bootstrap_microceph,
     bootstrap_nfs_server,
     charm_channel,
+    check_files,
 )
 
 logger = logging.getLogger(__name__)
-
-FILESYSTEM_CLIENT = "filesystem-client"
-MOUNT_PROVIDER = "mount-provider"
-NFS_SERVER_PROXY = "nfs-server-proxy"
-CEPHFS_SERVER_PROXY = "cephfs-server-proxy"
-MOUNT_REQUIRERS = ["srv", "shared"]
-CHARMS = [
-    FILESYSTEM_CLIENT,
-    NFS_SERVER_PROXY,
-    CEPHFS_SERVER_PROXY,
-    MOUNT_PROVIDER,
-] + MOUNT_REQUIRERS
 
 
 @pytest.mark.order(1)
@@ -38,6 +35,7 @@ def test_deploy(
     nfs_server_proxy: str | Path,
     cephfs_server_proxy: str | Path,
     test_mount_client: Path,
+    machines: Machines,
 ) -> None:
     """Build the charm-under-test and deploy it together with related charms.
 
@@ -45,16 +43,12 @@ def test_deploy(
     """
     logger.info(f"Deploying {', '.join(CHARMS)}")
 
-    # Pre-create the two machines we'll co-locate applications onto.
-    storage_machine_id = add_machine(juju, "mem=4G root-disk=20G virt-type=virtual-machine")
-    mounts_machine_id = add_machine(juju, "virt-type=virtual-machine")
-
     # Deploy the ubuntu charm onto the mounts machine.
     juju.deploy(
         "ubuntu",
         "ubuntu",
         base="ubuntu@24.04",
-        to=mounts_machine_id,
+        to=machines.mounts_machine_id,
     )
 
     # Deploy filesystem-client and mount-provider as subordinates (0 units).
@@ -65,35 +59,30 @@ def test_deploy(
             channel=charm_channel(filesystem_client),
         )
 
-    # Deploy the NFS and CephFS server proxies onto the storage machine.
+    # Deploy the NFS and CephFS server proxies onto the storage machines.
     juju.deploy(
         str(nfs_server_proxy),
         NFS_SERVER_PROXY,
         base=base,
         channel=charm_channel(nfs_server_proxy),
-        to=storage_machine_id,
+        to=machines.storage_machine_id,
     )
     juju.deploy(
         str(cephfs_server_proxy),
         CEPHFS_SERVER_PROXY,
         base=base,
         channel=charm_channel(cephfs_server_proxy),
-        to=storage_machine_id,
+        to=machines.storage_machine_id,
     )
 
     # Deploy the test mount client charms onto the mounts machine.
     for app in MOUNT_REQUIRERS:
-        juju.deploy(
-            str(test_mount_client),
-            app,
-            base=base,
-            to=mounts_machine_id,
-        )
+        juju.deploy(str(test_mount_client), app, base=base, to=machines.mounts_machine_id)
 
     # Bootstrap the NFS server and MicroCeph cluster concurrently.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        nfs_future = pool.submit(bootstrap_nfs_server, juju, storage_machine_id)
-        cephfs_future = pool.submit(bootstrap_microceph, juju, storage_machine_id)
+        nfs_future = pool.submit(bootstrap_nfs_server, juju, machines.storage_machine_id)
+        cephfs_future = pool.submit(bootstrap_microceph, juju, machines.storage_machine_id)
 
     nfs_info = nfs_future.result()
     cephfs_info = cephfs_future.result()
@@ -123,7 +112,6 @@ def test_deploy(
         error=lambda status: jubilant.any_error(
             status, NFS_SERVER_PROXY, CEPHFS_SERVER_PROXY, "ubuntu"
         ),
-        timeout=5000,
     )
 
 
@@ -152,13 +140,6 @@ def test_integrate(juju: jubilant.Juju) -> None:
         assert unit.workload_status.message == "Waiting for mountpoint from `mount` integration"
 
 
-def check_files(juju: jubilant.Juju, unit_name: str, path: str) -> None:
-    result = juju.ssh(unit_name, f"ls {path}")
-    assert "test-1" in result
-    assert "test-2" in result
-    assert "test-3" in result
-
-
 @pytest.mark.order(3)
 def test_nfs(juju: jubilant.Juju) -> None:
     juju.integrate(f"{FILESYSTEM_CLIENT}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")
@@ -176,23 +157,30 @@ def test_nfs(juju: jubilant.Juju) -> None:
 
     juju.wait(
         lambda status: jubilant.all_active(status, FILESYSTEM_CLIENT, *MOUNT_REQUIRERS),
-        error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT, *MOUNT_REQUIRERS),
+        error=lambda status: (
+            jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
+            or (
+                jubilant.all_agents_idle(status)
+                and jubilant.any_blocked(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
+            )
+        ),
     )
 
     check_files(juju, "ubuntu/0", "/nfs")
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
 
-
-@pytest.mark.order(4)
-def test_cephfs(juju: jubilant.Juju) -> None:
-    # Remove NFS relations before switching to CephFS.
+    # Remove NFS relations after testing
     juju.remove_relation(f"{FILESYSTEM_CLIENT}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")
     juju.remove_relation(f"{MOUNT_PROVIDER}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")
     juju.wait(
         lambda status: jubilant.all_blocked(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
         error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
     )
+
+
+@pytest.mark.order(4)
+def test_cephfs(juju: jubilant.Juju) -> None:
 
     # Reconfigure and integrate with CephFS.
     juju.config(
@@ -208,9 +196,23 @@ def test_cephfs(juju: jubilant.Juju) -> None:
     juju.integrate(f"{MOUNT_PROVIDER}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem")
     juju.wait(
         lambda status: jubilant.all_active(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
-        error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
+        error=lambda status: (
+            jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
+            or (
+                jubilant.all_agents_idle(status)
+                and jubilant.any_blocked(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
+            )
+        ),
     )
 
     check_files(juju, "ubuntu/0", "/cephfs")
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
+
+    juju.remove_relation(f"{FILESYSTEM_CLIENT}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem")
+    juju.remove_relation(f"{MOUNT_PROVIDER}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem")
+
+    juju.wait(
+        lambda status: jubilant.all_blocked(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
+        error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
+    )

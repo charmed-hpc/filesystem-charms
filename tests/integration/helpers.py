@@ -7,11 +7,12 @@ import json
 import logging
 import re
 import textwrap
+import time
 from pathlib import Path
 
 import jubilant
-from charms.filesystem_client.v0.filesystem_info import CephfsInfo, NfsInfo
-from tenacity import retry, stop_after_attempt, wait_exponential
+import tenacity
+from charms.filesystem_client.v0.filesystem_info import CephfsInfo, LustreInfo, NfsInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ DEFAULT_CHARM_CHANNEL = "latest/edge"
 CEPH_FS_NAME = "cephfs"
 CEPH_USERNAME = "fs-client"
 CEPH_PATH = "/"
+
+LUSTRE_FS_NAME = "lustrefs"
 
 
 def add_machine(juju: jubilant.Juju, constraints: str) -> str:
@@ -84,6 +87,70 @@ def bootstrap_nfs_server(juju: jubilant.Juju, machine_id: str) -> NfsInfo:
     return NfsInfo(hostname=address, port=None, path="/data")
 
 
+def bootstrap_lustre_server(juju: jubilant.Juju, machine_id: str) -> LustreInfo:
+    """Bootstrap a minimal Lustre server in Juju.
+
+    Returns:
+        LustreInfo: Information to mount the Lustre share.
+    """
+    # TODO: temporarily do a manual installation while the Lustre charm is a WIP.
+    juju.deploy("ubuntu", "lustre-server", base="ubuntu@24.04", to=machine_id)
+    juju.wait(
+        lambda status: jubilant.all_active(status, "lustre-server"),
+        timeout=1000,
+    )
+
+    unit = "lustre-server/0"
+
+    _logger.info("Starting Lustre server")
+    juju.exec("add-apt-repository -y ppa:ubuntu-hpc/lustre-2.17", unit=unit)
+    juju.exec("apt update", unit=unit)
+    juju.exec(
+        "DEBIAN_FRONTEND=noninteractive apt -y install "
+        "lustre-server-modules-dkms lustre-server-utils zfsutils-linux",
+        unit=unit,
+        # Compiling the DKMS modules takes a bit longer than 5 minutes...
+        wait=2000,
+    )
+
+    juju.exec("modprobe lustre", unit=unit)
+    try:
+        juju.exec("lnetctl net show --net tcp", unit=unit)
+    except jubilant.TaskError:
+        # tcp possibly does not exist, so create it
+        result = juju.exec("ip -json route show default", unit=unit)
+        default_interface = json.loads(result.stdout)[0]["dev"]
+        juju.exec(f"lnetctl net add --net tcp --if {default_interface}", unit=unit)
+
+    juju.exec("truncate -s 5G /root/mgm.img", unit=unit)
+    juju.exec("truncate -s 10G /root/ost.img", unit=unit)
+    juju.exec(
+        f"mkfs.lustre --mgs --mdt --backfstype=zfs --fsname={LUSTRE_FS_NAME} "
+        "--index=0 --device-size=5120 mgmpool/mgm /root/mgm.img",
+        unit=unit,
+    )
+    host = juju.exec("hostname -I", unit=unit).stdout.strip() + "@tcp"
+    juju.exec(
+        f"mkfs.lustre --ost --backfstype=zfs --fsname={LUSTRE_FS_NAME} "
+        f"--mgsnode={host} --device-size=10240 --index=0 ostpool/ost1 /root/ost.img",
+        unit=unit,
+    )
+
+    juju.exec("mkdir -p /mnt/mgm /mnt/ost /mnt/scratch", unit=unit)
+    juju.exec("zfs set quota=4G mgmpool/mgm", unit=unit)
+    juju.exec("zfs set quota=9G ostpool/ost1", unit=unit)
+    time.sleep(10)
+    juju.exec("mount -t lustre mgmpool/mgm /mnt/mgm", unit=unit)
+    juju.exec("mount -t lustre ostpool/ost1 /mnt/ost", unit=unit)
+
+    juju.exec(f"mount -t lustre {host}:/{LUSTRE_FS_NAME} /mnt/scratch", unit=unit)
+    for i in [1, 2, 3]:
+        juju.exec(f"touch /mnt/scratch/test-{i}", unit=unit)
+
+    _logger.info("Lustre share host is %s with filesystem name %s", host, LUSTRE_FS_NAME)
+    return LustreInfo(mgs_ids=[host], fs_name=LUSTRE_FS_NAME)
+
+
 def bootstrap_microceph(juju: jubilant.Juju, machine_id: str) -> CephfsInfo:
     """Bootstrap a minimal Microceph cluster in Juju.
 
@@ -137,15 +204,16 @@ def bootstrap_microceph(juju: jubilant.Juju, machine_id: str) -> CephfsInfo:
     )
 
     _wait_for_ceph(juju, unit)
-    juju.exec(f"sudo mount -t ceph admin@.{CEPH_FS_NAME}={CEPH_PATH} /mnt", unit=unit)
+    juju.exec("mkdir -p /mnt/cephfs", unit=unit)
+    juju.exec(f"sudo mount -t ceph admin@.{CEPH_FS_NAME}={CEPH_PATH} /mnt/cephfs", unit=unit)
 
     for i in [1, 2, 3]:
-        juju.exec(f"sudo touch /mnt/test-{i}", unit=unit)
+        juju.exec(f"sudo touch /mnt/cephfs/test-{i}", unit=unit)
 
     return _get_cephfs_info(juju, unit)
 
 
-@retry(wait=wait_exponential(max=10), stop=stop_after_attempt(20))
+@tenacity.retry(wait=tenacity.wait_exponential(max=20), stop=tenacity.stop_after_attempt(20))
 def _wait_for_ceph(juju: jubilant.Juju, unit: str) -> None:
     """Wait until the Ceph cluster is ready."""
     result = juju.exec("microceph.ceph -s -f json", unit=unit)
@@ -171,3 +239,15 @@ def _get_cephfs_info(juju: jubilant.Juju, unit: str) -> CephfsInfo:
         user=CEPH_USERNAME,
         key=key,
     )
+
+
+@tenacity.retry(
+    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=10),
+    stop=tenacity.stop_after_attempt(5),
+    reraise=True,
+)
+def check_files(juju: jubilant.Juju, unit_name: str, path: str) -> None:
+    result = juju.ssh(unit_name, f"ls {path}")
+    assert "test-1" in result
+    assert "test-2" in result
+    assert "test-3" in result
