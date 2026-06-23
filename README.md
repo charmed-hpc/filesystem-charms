@@ -1,7 +1,7 @@
 # Filesystem charms
 
-[![CI](https://github.com/charmed-hpc/filesystem-charms/actions/workflows/ci.yaml/badge.svg)](https://github.com/charmed-hpc/filesystem-charms/actions/workflows/ci.yaml/badge.svg)
-[![Publish](https://github.com/charmed-hpc/filesystem-charms/actions/workflows/publish.yaml/badge.svg)](https://github.com/charmed-hpc/filesystem-charms/actions/workflows/publish.yaml/badge.svg)
+[![CI](https://github.com/canonical/filesystem-charms/actions/workflows/ci.yaml/badge.svg)](https://github.com/canonical/filesystem-charms/actions/workflows/ci.yaml/badge.svg)
+[![Publish](https://github.com/canonical/filesystem-charms/actions/workflows/publish.yaml/badge.svg)](https://github.com/canonical/filesystem-charms/actions/workflows/publish.yaml/badge.svg)
 [![Matrix](https://img.shields.io/matrix/ubuntu-hpc%3Amatrix.org?logo=matrix&label=ubuntu-hpc)](https://matrix.to/#/#ubuntu-hpc:matrix.org)
 
 [Juju](https://juju.is) charms to manage shared filesystems.
@@ -149,7 +149,7 @@ constructive feedback. Interested in being involved with the development of the 
 - [Join our online chat](https://matrix.to/#/#ubuntu-hpc:matrix.org)
 - [Contributing guidelines](./CONTRIBUTING.md)
 - [Code of conduct](https://ubuntu.com/community/ethos/code-of-conduct)
-- [File a bug report](https://github.com/charmed-hpc/filesystem-charms/issues)
+- [File a bug report](https://github.com/canonical/filesystem-charms/issues)
 - [Juju SDK docs](https://juju.is/docs/sdk)
 
 ## 📋 License
