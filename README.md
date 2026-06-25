@@ -12,18 +12,19 @@ request, and mount shared filesystems. We currently have:
 - [`filesystem-client-operator`](./charms/filesystem-client/): requests and mounts exported filesystems on virtual machines.
 - [`nfs-server-proxy-operator`](./charms/nfs-server-proxy/): exports NFS shares from NFS servers not managed by Juju.
 - [`cephfs-server-proxy-operator`](./charms/cephfs-server-proxy): exports Ceph filesystems from Ceph clusters not managed by Juju.
+- [`lustre-server-proxy-operator`](./charms/lustre-server-proxy): exports Lustre filesystems from Lustre servers not managed by Juju.
 
 ## ✨ Getting started
 
-#### With a minimal NFS kernel server
+### With a minimal NFS kernel server
 
 First, launch a virtual machine using [LXD](https://ubuntu.com/lxd):
 
 ```shell
-$ snap install lxd
-$ lxd init --auto
-$ lxc launch ubuntu:24.04 nfs-server --vm
-$ lxc shell nfs-server
+snap install lxd
+lxd init --auto
+lxc launch ubuntu:24.04 nfs-server --vm
+lxc shell nfs-server
 ```
 
 Inside the LXD virtual machine, set up an NFS kernel server that exports
@@ -41,9 +42,6 @@ exportfs -a
 systemctl restart nfs-kernel-server
 ```
 
-> You can verify if the NFS server is exporting the desired directories
-> by using the command `showmount -e localhost` while inside the LXD virtual machine.
-
 Grab the network address of the LXD virtual machine and then exit the current shell session:
 
 ```shell
@@ -54,27 +52,27 @@ exit
 Now deploy the NFS server proxy operator with the filesystem client operator and the principal charm:
 
 ```shell
-$ juju deploy nfs-server-proxy --channel latest/edge \
+juju deploy nfs-server-proxy --channel latest/edge \
     --config hostname=<IPv4 address of LXD virtual machine> \
     --config path=/data
-$ juju deploy filesystem-client data --config mountpoint=/data
-$ juju deploy ubuntu --base ubuntu@24.04
-$ juju integrate data:juju-info ubuntu:juju-info
-$ juju integrate data:filesystem nfs-server-proxy:filesystem
+juju deploy filesystem-client data --config mountpoint=/data
+juju deploy ubuntu --base ubuntu@24.04
+juju integrate data:juju-info ubuntu:juju-info
+juju integrate data:filesystem nfs-server-proxy:filesystem
 ```
 
-#### With Microceph
+### With Microceph
 
 First, launch a virtual machine using [LXD](https://ubuntu.com/lxd):
 
 ```shell
-$ snap install lxd
-$ lxd init --auto
-$ lxc launch ubuntu:22.04 cephfs-server --vm
-$ lxc shell cephfs-server
+snap install lxd
+lxd init --auto
+lxc launch ubuntu:22.04 cephfs-server --vm
+lxc shell cephfs-server
 ```
 
-Inside the LXD virtual machine, set up [Microceph](https://github.com/canonical/microceph) to export a Ceph filesystem.
+Inside the LXD virtual machine, set up [Microceph](https://github.com/canonical/microceph) to export a Ceph filesystem:
 
 ```shell
 ln -s /bin/true /usr/local/bin/udevadm
@@ -86,23 +84,15 @@ microceph disk add loop,2G,3
 microceph.ceph osd pool create cephfs_data
 microceph.ceph osd pool create cephfs_metadata
 microceph.ceph fs new cephfs cephfs_metadata cephfs_data
-microceph.ceph fs authorize cephfs client.fs-client / rw # Creates a new `fs-client` user.
+microceph.ceph fs authorize cephfs client.fs-client / rw
 ```
 
-> You can verify if the CephFS server is working correctly by using the command
-> `microceph.ceph fs status cephfs` while inside the LXD virtual machine.
-
-To mount a Ceph filesystem, you'll require some information that you can get with a couple of commands:
+To mount a Ceph filesystem, gather the required information and exit:
 
 ```shell
 export HOST=$(hostname -I | tr -d '[:space:]'):6789
 export FSID=$(microceph.ceph -s -f json | jq -r '.fsid')
 export CLIENT_KEY=$(microceph.ceph auth print-key client.fs-client)
-```
-
-Print the required information for reference and then exit the current shell session:
-
-```shell
 echo $HOST
 echo $FSID
 echo $CLIENT_KEY
@@ -124,12 +114,11 @@ juju integrate data:juju-info ubuntu:juju-info
 juju integrate data:filesystem cephfs-server-proxy:filesystem
 ```
 
-#### Mounting using charm provided configuration
+### Mounting using charm provided configuration
 
-In all the previous examples, the `filesystem-client` charm has been setup using manually
-provided configuration options, but if you are a charm author and your charm needs a shared filesystem,
-you can also integrate with `filesystem-client` using the [`mount_info`] charm library. Assuming
-your charm is called `my-charm`, and the charm has been setup to support the `mount` integration,
+If you are a charm author and your charm needs a shared filesystem,
+you can integrate with `filesystem-client` using the [`mount_info`] charm library. Assuming
+your charm is called `my-charm`, and the charm has been set up to support the `mount` integration,
 mounting a filesystem can be accomplished by simply doing:
 
 ```shell
@@ -140,17 +129,42 @@ juju integrate data:mount my-charm:mount
 
 [`mount_info`]: ./charms/filesystem-client/lib/charms/filesystem_client/v0/mount_info.py
 
+## 🤔 What's next?
+
+If you want to learn more about all the things you can do with the filesystem charms,
+here are some further resources for you to explore:
+
+* [Charmed HPC documentation](https://canonical-charmed-hpc.readthedocs-hosted.com/latest/)
+* [Open an issue](https://github.com/canonical/filesystem-charms/issues/new?title=ISSUE+TITLE&body=*Please+describe+your+issue*)
+* [Ask a question](https://discourse.ubuntu.com/c/project/hpc/151)
+
+## 🛠️ Development
+
+The project uses [just](https://github.com/casey/just) and [uv](https://github.com/astral-sh/uv) for
+development, which provides some useful commands that will definitely help while hacking on the charms:
+
+```shell
+just repo fmt          # Apply formatting standards to code
+just repo lint         # Check code against coding style standards
+just repo typecheck    # Type checking
+just repo unit         # Run unit tests
+just repo integration  # Run integration tests
+```
+
+If you're interested in contributing, take a look at our [contributing guidelines](./CONTRIBUTING.md).
+
 ## 🤝 Project and community
 
 The filesystem charms are a project of the [Ubuntu High-Performance Computing community](https://ubuntu.com/community/governance/teams/hpc).
-It is an open source project that is welcome to community involvement, contributions, suggestions, fixes, and
-constructive feedback. Interested in being involved with the development of the filesystem charms? Check out these links below:
+Interested in contributing bug fixes, patches, documentation, or feedback? Want to join the
+Ubuntu HPC community? You've come to the right place 🤩
 
-- [Join our online chat](https://matrix.to/#/#ubuntu-hpc:matrix.org)
-- [Contributing guidelines](./CONTRIBUTING.md)
-- [Code of conduct](https://ubuntu.com/community/ethos/code-of-conduct)
-- [File a bug report](https://github.com/canonical/filesystem-charms/issues)
-- [Juju SDK docs](https://juju.is/docs/sdk)
+Here's some links to help you get started with joining the community:
+
+* [Ubuntu Code of Conduct](https://ubuntu.com/community/ethos/code-of-conduct)
+* [Contributing guidelines](./CONTRIBUTING.md)
+* [Join the conversation on Matrix](https://matrix.to/#/#hpc:ubuntu.com)
+* [Get the latest news or ask and answer questions on the Ubuntu Discourse](https://discourse.ubuntu.com/c/project/hpc/151)
 
 ## 📋 License
 
