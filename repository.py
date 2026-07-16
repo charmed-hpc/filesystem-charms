@@ -11,13 +11,13 @@ import os
 import shutil
 import subprocess
 import sys
-import tomllib
 from collections.abc import Collection, Mapping, MutableSequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Thread
 from typing import Any
 
+import rtoml
 import yaml
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -27,7 +27,7 @@ PUBLIC_PKGS_PATH = ROOT_DIR / "pkg"
 PRIVATE_PKGS_PATH = ROOT_DIR / "internal"
 PYPROJECT_FILE = "pyproject.toml"
 CHARMCRAFT_FILE = "charmcraft.yaml"
-LOCK_FILE = "uv.lock"
+LOCK_FILE = ROOT_DIR / "uv.lock"
 LIBS_CHARM_PATH = BUILD_PATH / "libs"
 
 
@@ -58,7 +58,7 @@ class BuildTool:
         def reader(pipe):
             with pipe:
                 for line in pipe:
-                    line.replace(str(BUILD_PATH), str(CHARMS_PATH))
+                    line = line.replace(str(BUILD_PATH), str(CHARMS_PATH))
                     print(line, end="")
 
         kwargs["text"] = True
@@ -159,45 +159,37 @@ class Repository:
     internal_libraries: list[CharmLibrary]
     public_packages: list[Package]
     private_packages: list[Package]
+    root_pyproject: dict[str, Any]
 
     def __init__(self) -> None:
         """Load the monorepo information."""
         UV.run_command(["lock", "--quiet"])
         try:
-            with (ROOT_DIR / PYPROJECT_FILE).open(mode="rb") as f:
-                project = tomllib.load(f)
+            with open(ROOT_DIR / PYPROJECT_FILE, mode="r") as fin:
+                self.root_pyproject = rtoml.load(fin)
         except OSError:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`")
 
         try:
-            with (ROOT_DIR / LOCK_FILE).open(mode="rb") as f:
-                uv_lock = tomllib.load(f)
+            with open(LOCK_FILE) as fin:
+                uv_lock = rtoml.load(fin)
         except OSError:
             raise RepositoryError("Failed to read uv.lock file")
+
+        # Store the fully parsed root pyproject.toml so that tooling config (e.g.
+        # `tool.uv.sources`, `tool.uv.dependency-metadata`) can be inherited into
+        # each staged charm's pyproject.toml without duplicating these entries.
+        self.root_pyproject.setdefault("tool", {}).setdefault("uv", {})
+        self.root_pyproject["tool"]["uv"].setdefault("sources", {})
+        self.root_pyproject["tool"]["uv"].setdefault("dependency-metadata", [])
 
         try:
             self.external_libraries = [
                 CharmLibrary.from_charmcraft_lib(entry)
-                for entry in project["tool"]["repository"]["external-libraries"]
+                for entry in self.root_pyproject["tool"]["repository"]["external-libraries"]
             ]
         except KeyError:
             self.external_libraries = []
-
-        try:
-            binary_packages = project["tool"]["repository"]["binary-packages"]
-
-            resolved_binary_packages = {
-                bin_pkg: package["version"]
-                for bin_pkg in binary_packages
-                for package in uv_lock["package"]
-                if package["name"] == bin_pkg
-            }
-        except KeyError:
-            resolved_binary_packages = {}
-        except StopIteration:
-            raise RepositoryError("Could not find package in the lock file")
-        except OSError:
-            raise RepositoryError(f"Failed to read file `{ROOT_DIR / LOCK_FILE}`")
 
         self.internal_libraries = []
         for charm in CHARMS_PATH.iterdir():
@@ -247,7 +239,6 @@ class Repository:
                     path,
                     libraries=self.libraries,
                     packages=self.packages,
-                    binary_packages=resolved_binary_packages,
                     uv_lock=uv_lock,
                 )
             )
@@ -268,12 +259,11 @@ def load_charm(
     *,
     libraries: Collection[CharmLibrary],
     packages: Collection[Package],
-    binary_packages: Mapping[str, str],
     uv_lock: Mapping[str, Any],
 ) -> Charm | None:
     try:
-        with (charm / PYPROJECT_FILE).open(mode="rb") as f:
-            project = tomllib.load(f)
+        with open(charm / PYPROJECT_FILE, mode="r") as fin:
+            project = rtoml.load(fin)
     except NotADirectoryError:
         logger.info("skipping %s because it is not a charm directory", charm)
         return None
@@ -301,10 +291,6 @@ def load_charm(
                 deps.add(pkg_dep["name"])
                 pending.append(pkg_dep["name"])
 
-    metadata["parts"]["charm"]["charm-binary-python-packages"] = [
-        f"{package}=={version}" for package, version in binary_packages.items() if package in deps
-    ]
-
     libs = []
     try:
         for lib in project["tool"]["repository"]["libraries"]:
@@ -331,8 +317,8 @@ def load_charm(
 
 def load_package(package: Path) -> Package | None:
     try:
-        with (package / PYPROJECT_FILE).open(mode="rb") as f:
-            metadata = tomllib.load(f)
+        with open(package / PYPROJECT_FILE, mode="r") as fin:
+            metadata = rtoml.load(fin)
     except NotADirectoryError:
         logger.info("skipping %s because it is not a package directory", package)
         return None
@@ -377,13 +363,16 @@ def stage_charm(
         shutil.copytree(charm.path, charm.build_path, dirs_exist_ok=True)
 
         # Overrides the charmcraft.yaml instead of editing it. This avoids having
-        # to load two times the same charm metadata to inject the correct value for
-        # charm-binary-python-packages
+        # to load two times the same charm metadata.
         try:
             with open(charm.build_path / CHARMCRAFT_FILE, "wt") as f:
                 yaml.safe_dump(charm.metadata, f, sort_keys=False)
         except OSError:
             raise RepositoryError(f"Failed to write file `{charm.build_path / CHARMCRAFT_FILE}`")
+
+        # Inject uv lockfile into build directories. The lockfile is used by `charmcraft` to determine
+        # the version of charm dependencies to pull in.
+        shutil.copy(LOCK_FILE, charm.build_path)
 
         # Create a version file and pack it into the charm. This is dynamically generated to ensure
         # that the git revision of the charm is always recorded in this version file.
@@ -413,32 +402,64 @@ def stage_charm(
             copy(src, dest)
 
     if not dry_run:
-        UV.run_command(
-            [
-                "--quiet",
-                "export",
-                "--package",
-                charm.name,
-                "--frozen",
-                "--no-hashes",
-                "--no-emit-workspace",
-                "--format=requirements-txt",
-                "-o",
-                str(charm.build_path / "requirements.txt"),
-            ]
-        )
+        with open(charm.build_path / PYPROJECT_FILE, "r") as fin:
+            pyproject = rtoml.load(fin)
+        # Ensure `tool.uv.sources` and `tool.uv.dependency-metadata` always exist
+        # so we can access them directly.
+        pyproject.setdefault("tool", {}).setdefault("uv", {})
+        pyproject["tool"]["uv"].setdefault("sources", {})
+        pyproject["tool"]["uv"].setdefault("dependency-metadata", [])
 
-    if not dry_run:
-        with open(charm.build_path / "requirements.txt", "+a") as f:
-            print("# ===== Local packages =====", file=f)
-            for pkg in charm.packages:
-                filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
-                src = BUILD_PATH / "dist" / filename
-                dest = charm.build_path / "dist" / filename
-                logger.debug("Copying %s to %s", src, dest)
-                if not dry_run:
-                    copy(src, dest)
-                print(f"./dist/{filename}", file=f)
+        for pkg in charm.packages:
+            filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
+            src = BUILD_PATH / "dist" / filename
+            dest = charm.build_path / "dist" / filename
+            logger.debug("Copying %s to %s", src, dest)
+            copy(src, dest)
+
+            # Remove any package names from the dependencies fields that conflicts
+            # with local, vendored packages. Replace removed package name with the file path
+            # of the local equivalent package.
+            try:
+                pyproject["project"]["dependencies"].remove(pkg.name)
+            except ValueError:
+                pass
+
+            # Inject local subpackage into charm dependencies.
+            pyproject["project"]["dependencies"].append(
+                f"{pkg.name} @ file:///${{PROJECT_ROOT}}/dist/{filename}"
+            )
+
+        # Inherit `tool.uv.sources` and `tool.uv.dependency-metadata` from the root
+        # pyproject.toml so charms don't need to duplicate them.
+        #
+        # This avoids having to duplicate those properties on every charm, which
+        # could get out of sync if we forget to update those blocks in any of the
+        # charms.
+        root_uv = repository.root_pyproject["tool"]["uv"]
+        inherited_sources = {
+            name: source
+            for name, source in root_uv["sources"].items()
+            # Workspace-member sources are excluded because they're vendored as
+            # `file://` URLs above.
+            if not source.get("workspace", False)
+        }
+        pyproject["tool"]["uv"]["sources"] = {
+            **inherited_sources,
+            **pyproject["tool"]["uv"]["sources"],
+        }
+
+        inherited_dependency_metadata = root_uv["dependency-metadata"]
+        existing_by_name = {
+            entry["name"]: entry
+            for entry in pyproject["tool"]["uv"]["dependency-metadata"]
+        }
+        for entry in inherited_dependency_metadata:
+            existing_by_name.setdefault(entry["name"], entry)
+        pyproject["tool"]["uv"]["dependency-metadata"] = list(existing_by_name.values())
+
+        with open(charm.build_path / PYPROJECT_FILE, "wt") as fout:
+            rtoml.dump(pyproject, fout)
 
     logger.info("staged charm %s at %s", charm.path.name, charm.build_path)
 
@@ -509,7 +530,7 @@ def validate_charm(charm: str, repository: Repository) -> Charm:
 def validate_package(package: str, repository: Repository) -> Package:
     """Validate the package."""
     try:
-        return next(filter(lambda p: p.name == package, repository.packages))
+        return next(filter(lambda p: p.path.name == package, repository.packages))
     except StopIteration:
         raise RepositoryError(f"Unknown package `{package}`")
 
@@ -810,10 +831,10 @@ def unit_test_cli(
             files.append(str(coverage_file))
 
     for package in packages:
-        if not (package.path / "tests").exists():
-            logger.info("pachage %s does not contain unit tests. skipping...", package.name)
+        tests_path = package.path / "tests" / "unit"
+        if not tests_path.exists() or not any(tests_path.glob("test_*.py")):
+            logger.info("skipping unit tests for package %s (no tests found)", package.name)
             continue
-
         logger.info("running unit tests for package %s", package.name)
         coverage_file = package.path / ".coverage"
         uv_run(
