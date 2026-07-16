@@ -24,13 +24,16 @@ CEPH_PATH = "/"
 LUSTRE_FS_NAME = "lustrefs"
 
 
-def add_machine(juju: jubilant.Juju, constraints: str) -> str:
+def add_machine(juju: jubilant.Juju, constraints: str, base: str | None = None) -> str:
     """Add a Juju machine with the given constraints and return its ID.
 
     Blocks until the machine reaches "started" status.
     """
     # `add-machine` writes its output to stderr.
-    _stdout, stderr = juju._cli("add-machine", "--constraints", constraints)
+    args = ["add-machine", "--constraints", constraints]
+    if base:
+        args += ["--base", base]
+    _stdout, stderr = juju._cli(*args)
     match = re.search(r"(\d+)", stderr)
     if not match:
         raise RuntimeError(f"Could not parse machine ID from output: {stderr!r}")
@@ -50,13 +53,13 @@ def charm_channel(charm: str | Path) -> str | None:
     return DEFAULT_CHARM_CHANNEL if isinstance(charm, str) else None
 
 
-def bootstrap_nfs_server(juju: jubilant.Juju, machine_id: str) -> NfsInfo:
+def bootstrap_nfs_server(juju: jubilant.Juju, machine_id: str, base: str) -> NfsInfo:
     """Bootstrap a minimal NFS kernel server in Juju.
 
     Returns:
         NfsInfo: Information to mount the NFS share.
     """
-    juju.deploy("ubuntu", "nfs-server", base="ubuntu@24.04", to=machine_id)
+    juju.deploy("ubuntu", "nfs-server", base=base, to=machine_id)
     juju.wait(
         lambda status: jubilant.all_active(status, "nfs-server"),
         timeout=1000,
@@ -113,7 +116,7 @@ def bootstrap_lustre_server(
     return LustreInfo(mgs_ids=[host], fs_name=LUSTRE_FS_NAME)
 
 
-def bootstrap_microceph(juju: jubilant.Juju, machine_id: str) -> CephfsInfo:
+def bootstrap_microceph(juju: jubilant.Juju, machine_id: str, base: str) -> CephfsInfo:
     """Bootstrap a minimal Microceph cluster in Juju.
 
     Returns:
@@ -124,8 +127,8 @@ def bootstrap_microceph(juju: jubilant.Juju, machine_id: str) -> CephfsInfo:
     juju.deploy(
         "microceph",
         "microceph",
-        base="ubuntu@24.04",
-        channel="squid/stable",
+        base=base,
+        channel="tentacle/candidate",
         num_units=1,
         storage={"osd-standalone": "loop,3,1G"},
         to=machine_id,

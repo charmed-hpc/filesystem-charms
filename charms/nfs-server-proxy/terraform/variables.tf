@@ -19,7 +19,7 @@ variable "app_name" {
 }
 
 variable "base" {
-  description = "Operating system base for the charm (for example, ubuntu@24.04)"
+  description = "Operating system base for the charm (for example, ubuntu@26.04)"
   type        = string
   default     = null
 }

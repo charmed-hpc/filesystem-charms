@@ -471,7 +471,7 @@ def stage_charms(
     LIBS_CHARM = {
         "name": "libs",
         "type": "charm",
-        "base": "ubuntu@24.04",
+        "base": "ubuntu@26.04",
         "summary": "",
         "description": "",
         "parts": {"charm": {}},

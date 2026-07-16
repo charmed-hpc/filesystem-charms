@@ -47,7 +47,7 @@ def test_deploy(
     juju.deploy(
         "ubuntu",
         "ubuntu",
-        base="ubuntu@24.04",
+        base=base,
         to=machines.mounts_machine_id,
     )
 
@@ -81,8 +81,8 @@ def test_deploy(
 
     # Bootstrap the NFS server and MicroCeph cluster concurrently.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        nfs_future = pool.submit(bootstrap_nfs_server, juju, machines.storage_machine_id)
-        cephfs_future = pool.submit(bootstrap_microceph, juju, machines.storage_machine_id)
+        nfs_future = pool.submit(bootstrap_nfs_server, juju, machines.storage_machine_id, base)
+        cephfs_future = pool.submit(bootstrap_microceph, juju, machines.storage_machine_id, base)
 
     nfs_info = nfs_future.result()
     cephfs_info = cephfs_future.result()

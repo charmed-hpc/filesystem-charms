@@ -37,7 +37,7 @@ class TestCharmInstall:
     def mock_os_release(self, mocker: MockerFixture) -> MagicMock:
         """Mock platform.freedesktop_os_release."""
         return mocker.patch(
-            "platform.freedesktop_os_release", return_value={"VERSION_CODENAME": "noble"}
+            "platform.freedesktop_os_release", return_value={"VERSION_CODENAME": "resolute"}
         )
 
     @pytest.fixture(scope="function")

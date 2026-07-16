@@ -19,7 +19,7 @@ for the Juju Terraform provider.
 | Name          | Type        | Description                                                        | Default              | Required |
 |---------------|-------------|--------------------------------------------------------------------|----------------------|:--------:|
 | `app_name`    | string      | Name for the deployed application                                  | `"nfs-server-proxy"` |          |
-| `base`        | string      | Operating system base for the charm (e.g. ubuntu@24.04)            | `null`               |          |
+| `base`        | string      | Operating system base for the charm (e.g. ubuntu@26.04)            | `null`               |          |
 | `channel`     | string      | Charm channel to deploy from                                       | `"latest/edge"`      |          |
 | `config`      | map(string) | Map of charm configuration options                                 | `{}`                 |          |
 | `constraints` | string      | Constraints string for the charm deployment                        | `null`               |          |

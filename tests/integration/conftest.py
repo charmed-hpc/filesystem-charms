@@ -43,7 +43,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--charm-base",
         action="store",
-        default="ubuntu@24.04",
+        default="ubuntu@26.04",
         help="Charm base version to use for integration tests",
     )
     parser.addoption(
@@ -128,7 +128,7 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
             print(log, end="")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def base(request: pytest.FixtureRequest) -> str:
     """Get the base to deploy the filesystem-charms charms on."""
     return request.config.getoption("--charm-base")
@@ -258,15 +258,15 @@ class Machines:
 
 
 @pytest.fixture(scope="session")
-def machines(juju: jubilant.Juju) -> Machines:
+def machines(juju: jubilant.Juju, base: str) -> Machines:
     """Get the preallocated machines that can be used to deploy Juju applications.
 
     Returns:
         `Machines` instance containing the IDs of the deployed machines.
     """
     storage_machine_id = add_machine(
-        juju, "mem=8G cores=4 root-disk=40G virt-type=virtual-machine"
+        juju, "mem=8G cores=4 root-disk=40G virt-type=virtual-machine", base=base
     )
-    mounts_machine_id = add_machine(juju, "mem=8G cores=4 virt-type=virtual-machine")
+    mounts_machine_id = add_machine(juju, "mem=8G cores=4 virt-type=virtual-machine", base=base)
 
     return Machines(storage_machine_id=storage_machine_id, mounts_machine_id=mounts_machine_id)

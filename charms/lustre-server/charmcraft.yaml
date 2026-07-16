@@ -18,9 +18,8 @@ description: |
   It is useful for HPC and data-intensive teams looking for a high-throughput, scalable, distributed
   file system.
 
-base: ubuntu@24.04
 platforms:
-  amd64:
+  ubuntu@26.04:amd64:
 
 parts:
   charm:

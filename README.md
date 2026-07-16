@@ -23,7 +23,7 @@ First, launch a virtual machine using [LXD](https://ubuntu.com/lxd):
 ```shell
 snap install lxd
 lxd init --auto
-lxc launch ubuntu:24.04 nfs-server --vm
+lxc launch ubuntu:26.04 nfs-server --vm
 lxc shell nfs-server
 ```
 
@@ -56,7 +56,7 @@ juju deploy nfs-server-proxy --channel latest/edge \
     --config hostname=<IPv4 address of LXD virtual machine> \
     --config path=/data
 juju deploy filesystem-client data --config mountpoint=/data
-juju deploy ubuntu --base ubuntu@24.04
+juju deploy ubuntu --base ubuntu@26.04
 juju integrate data:juju-info ubuntu:juju-info
 juju integrate data:filesystem nfs-server-proxy:filesystem
 ```
@@ -108,7 +108,7 @@ juju deploy cephfs-server-proxy --channel latest/edge \
   --config sharepoint=cephfs:/ \
   --config monitor-hosts=<HOST> \
   --config auth-info=fs-client:<CLIENT_KEY>
-juju deploy ubuntu --base ubuntu@24.04 --constraints virt-type=virtual-machine
+juju deploy ubuntu --base ubuntu@26.04 --constraints virt-type=virtual-machine
 juju deploy filesystem-client data --channel latest/edge --config mountpoint=/data
 juju integrate data:juju-info ubuntu:juju-info
 juju integrate data:filesystem cephfs-server-proxy:filesystem

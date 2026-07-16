@@ -119,6 +119,11 @@ jobs:
       - unit-test
       - typecheck
       - commitlint
+    strategy:
+      fail-fast: true
+      matrix:
+        bases:
+          - ubuntu@26.04
     steps:
       - name: Remove unnecessary files
         run: |
