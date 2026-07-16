@@ -27,7 +27,7 @@ jobs:
     name: Release to Charmhub
     needs:
       - ci-tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: true
       matrix:
@@ -38,9 +38,9 @@ jobs:
           - lustre-server-proxy
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Select Charmhub channel
-        uses: canonical/charming-actions/channel@2.6.3
+        uses: canonical/charming-actions/channel@2.7.0
         id: channel
       - name: Install `just`
         run: sudo snap install just --classic
@@ -51,24 +51,17 @@ jobs:
       - name: Stage charm
         run: just repo stage ${{ matrix.charm }} --clean
       - name: Setup LXD
-        uses: canonical/setup-lxd@v0.1.2
+        uses: canonical/setup-lxd@v1
         with:
-          channel: 5.21/stable
-      # TODO: https://github.com/canonical/charmcraft/issues/2125 -
-      #   Remove pin to charmcraft 3.2.3 once `FileExistsError` is fixed
-      #   when accessing the charmcraft build cache in parallel builds.
-      - name: Revert to charmcraft 3.2.3
-        run: |
-          sudo snap refresh charmcraft --revision=5858
-          sudo snap refresh charmcraft --hold
+          channel: 6/stable
       - name: Publish updated charm libraries to Charmhub
-        uses: canonical/charming-actions/release-libraries@2.6.3
+        uses: canonical/charming-actions/release-libraries@2.7.0
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           charm-path: "./_build/${{ matrix.charm }}"
       - name: Publish charm to Charmhub
-        uses: canonical/charming-actions/upload-charm@2.6.3
+        uses: canonical/charming-actions/upload-charm@2.7.0
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"

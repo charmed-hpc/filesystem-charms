@@ -33,10 +33,10 @@ concurrency:
 jobs:
   inclusive-naming-check:
     name: Inclusive naming check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run tests
         uses: get-woke/woke-action@v0
         with:
@@ -44,10 +44,10 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install `just`
         run: sudo snap install just --classic
       - name: Install `uv`
@@ -64,24 +64,28 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
       - name: Install commitlint
         run: npm install -D @commitlint/cli @commitlint/config-conventional
       - name: Validate PR commits with commitlint
-        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+        run: |
+          npx commitlint \
+            --from ${{ github.event.pull_request.base.sha }} \
+            --to ${{ github.event.pull_request.head.sha }} \
+            --verbose
 
   unit-test:
     name: Unit tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install `just`
         run: sudo snap install just --classic
       - name: Install `uv`
@@ -93,10 +97,10 @@ jobs:
 
   typecheck:
     name: Static type checking
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install `just`
         run: sudo snap install just --classic
       - name: Install `uv`
@@ -108,7 +112,7 @@ jobs:
 
   integration-test:
     name: Integration tests (LXD)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - inclusive-naming-check
       - lint
@@ -123,7 +127,7 @@ jobs:
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install `just`
         run: sudo snap install just --classic
       - name: Install `uv`
@@ -132,7 +136,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
-          juju-channel: 3.6/stable
+          juju-channel: 3.6/edge
       - name: Run tests
         run: |
           declare -a ARGS=()
