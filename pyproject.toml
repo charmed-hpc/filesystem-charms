@@ -28,7 +28,7 @@ dev = [
   "pytest ~= 9.0",
   "pytest-order ~= 1.1",
   "pytest-mock ~= 3.15",
-  "tenacity ~= 8.2",
+  "tenacity >= 8.2,< 10.0",
 ]
 
 [tool.uv.workspace]
