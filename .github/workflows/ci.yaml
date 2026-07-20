@@ -141,6 +141,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
+          lxd-channel: 5.21/stable
           juju-channel: 3.6/edge
       - name: Run tests
         run: |
