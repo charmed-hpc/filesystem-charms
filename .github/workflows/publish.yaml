@@ -38,7 +38,7 @@ jobs:
           - lustre-server-proxy
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Select Charmhub channel
         uses: canonical/charming-actions/channel@2.6.3
         id: channel
