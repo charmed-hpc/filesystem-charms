@@ -177,7 +177,7 @@ requires-dist = [
     { name = "pytest-order", marker = "extra == 'dev'", specifier = "~=1.1" },
     { name = "rtoml", marker = "extra == 'dev'", specifier = "~=0.13.0" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "tenacity", marker = "extra == 'dev'", specifier = "~=8.2" },
+    { name = "tenacity", marker = "extra == 'dev'", specifier = ">=8.2,<10.0" },
 ]
 provides-extras = ["dev"]
 

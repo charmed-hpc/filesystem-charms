@@ -128,7 +128,7 @@ def bootstrap_microceph(juju: jubilant.Juju, machine_id: str, base: str) -> Ceph
         "microceph",
         "microceph",
         base=base,
-        channel="tentacle/candidate",
+        channel="tentacle/stable",
         num_units=1,
         storage={"osd-standalone": "loop,3,1G"},
         to=machine_id,
