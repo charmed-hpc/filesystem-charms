@@ -1,18 +1,36 @@
-# Copyright 2024-2025 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 name: filesystem-client
-
 type: charm
-
 title: Filesystem Client
-
-summary: Mount filesystems on machine charms.
-
+summary: Charmed operator for mounting filesystems on machine charms.
 description: |
-  Mount filesystems on machine charms.
+  As part of Charmed HPC, this charm deploys and manages the filesystem client
+  responsible for mounting shared filesystems on machine charms. It handles the
+  mount lifecycle and exposes mount information to workload charms, providing
+  applications with access to exported filesystems.
 
-  Enables access to exported filesystems.
+  This charm integrates with the cephfs-server-proxy, lustre-server,
+  lustre-server-proxy, and nfs-server-proxy charms to mount shared filesystems,
+  and with workload charms to expose those mounts in their machines.
+
+  See the following how-to in Charmed HPC's documentation for more information about
+  how the filesystem-client charm is used in Charmed HPC:
+
+  - [How to deploy a shared filesystem](https://ubuntu.com/hpc/docs/latest/howto/deploy/deploy-shared-filesystem/#how-to-deploy-a-shared-filesystem)
+
+  For more information about Charmed HPC, view the
+  [full documentation](https://ubuntu.com/hpc/docs/latest).
+
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+  documentation: https://ubuntu.com/hpc/docs/latest
+  website: https://ubuntu.com/hpc
+  source:
+    - https://github.com/canonical/filesystem-charms
+  issues:
+    - https://github.com/canonical/filesystem-charms/issues
 
 platforms:
   ubuntu@26.04:amd64:
