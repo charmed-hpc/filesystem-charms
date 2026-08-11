@@ -12,7 +12,7 @@ from pytest_mock import MockerFixture
 from utils.manager import Error, MountsManager, lnet
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def manager(mocker: MockerFixture, tmp_path: pathlib.Path) -> MountsManager:
     """Mock MountsManager with package and autofs concerns stubbed out."""
     charm = MagicMock()
