@@ -38,6 +38,7 @@ jobs:
           - cephfs-server-proxy
           - nfs-server-proxy
           - lustre-server-proxy
+          - lustre-server
     steps:
       - name: Checkout
         uses: actions/checkout@v7
