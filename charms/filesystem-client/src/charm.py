@@ -11,6 +11,7 @@ import ops
 from charmed_hpc_libs.ops import StopCharm, refresh
 from charms.filesystem_client.v0.filesystem_info import FilesystemRequires
 from charms.filesystem_client.v0.mount_info import MountInfo, MountProvides
+from lustre_ops import lnet
 from utils.manager import MountsManager
 
 _logger = logging.getLogger(__name__)
@@ -51,11 +52,14 @@ class FilesystemClientCharm(ops.CharmBase):
         self._mount.set_mount_status(mounted=False)
         self.unit.status = ops.MaintenanceStatus("Updating status")
         self._mounts_manager.enable_lustre = cast(bool, self.config.get("enable-lustre"))
-        self._mounts_manager.lnet_networks_spec = cast(str, self.config.get("lnet-networks"))
+        lnet_networks_spec = cast(str, self.config.get("lnet-networks"))
 
         try:
             if not self._mounts_manager.supported():
                 raise StopCharm(ops.BlockedStatus("Cannot mount filesystems on LXD containers"))
+
+            if self._mounts_manager.enable_lustre:
+                self._mounts_manager.lnet_networks = lnet.parse_network_config(lnet_networks_spec)
 
             self._ensure_setup()
 

@@ -116,7 +116,7 @@ class MountsManager:
         self._master_file = pathlib.Path(f"/etc/auto.master.d/{unit_id}.autofs")
         self._autofs_file = pathlib.Path(f"/etc/auto.{unit_id}")
         self.enable_lustre = False
-        self.lnet_networks_spec = ""
+        self.lnet_networks: dict[str, list[str]] | None = None
 
     def _packages(self) -> list[apt.DebianPackage]:
         """List of packages required by the client."""
@@ -183,8 +183,7 @@ class MountsManager:
 
         # Configure LNet
         try:
-            networks = lnet.parse_network_config(self.lnet_networks_spec)
-            lnet.init(networks=networks)
+            lnet.init(networks=self.lnet_networks)
         except LNetError as e:
             raise Error(str(e)) from e
 

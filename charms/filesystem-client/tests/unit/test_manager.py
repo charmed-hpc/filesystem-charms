@@ -39,25 +39,22 @@ class TestSetupLnet:
 
         mock_init.assert_not_called()
 
-    def test_config_spec_forwarded(self, manager: MountsManager, mocker: MockerFixture) -> None:
-        """A non-empty lnet-networks spec is parsed and forwarded to lnet.init."""
+    def test_networks_forwarded(self, manager: MountsManager, mocker: MockerFixture) -> None:
+        """Configured LNet networks are forwarded to lnet.init."""
         mock_init = mocker.patch.object(lnet, "init")
         manager.enable_lustre = True
-        manager.lnet_networks_spec = "tcp=eth0; o2ib=ib0,ib1"
+        manager.lnet_networks = {"tcp": ["eth0"], "o2ib": ["ib0", "ib1"]}
 
         manager.setup()
 
-        mock_init.assert_called_once()
-        _, kwargs = mock_init.call_args
-        networks = kwargs["networks"]
-        assert networks == {"tcp": ["eth0"], "o2ib": ["ib0", "ib1"]}
+        mock_init.assert_called_once_with(networks=manager.lnet_networks)
 
     def test_lnet_error_wrapped(self, manager: MountsManager, mocker: MockerFixture) -> None:
         """An LNetError from init is wrapped as a manager Error."""
         lnet_error_message = "test lnet error message"
         mocker.patch.object(lnet, "init", side_effect=LNetError(lnet_error_message))
         manager.enable_lustre = True
-        manager.lnet_networks_spec = ""
+        manager.lnet_networks = None
 
         with pytest.raises(Error, match=lnet_error_message):
             manager.setup()
