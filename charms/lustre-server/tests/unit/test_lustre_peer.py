@@ -10,10 +10,11 @@ import ops
 import pytest
 from constants import LUSTRE_FSNAME
 from errors import LustreFilesystemError
+from lustre_ops.errors import LNetError
 from pytest_mock import MockerFixture
 
 MGS_UNIT_NAME = "lustre/0"
-MGS_NID = "10.0.0.5@tcp"
+MGS_NIDS = ["10.0.0.5@tcp", "10.0.0.6@o2ib0"]
 OSS_UNIT_NAME = "lustre/1"
 
 
@@ -39,32 +40,32 @@ def mock_model_with_relation(
     return mock_model, rel
 
 
-class TestMgsNidPublished:
-    """mgs_nid_published() tests."""
+class TestMgsNidsPublished:
+    """mgs_nids_published() tests."""
 
     def test_leader_publishes_nid(
         self, mocker: MockerFixture, mock_model_with_relation: tuple[MagicMock, MagicMock]
     ) -> None:
-        """Leader unit publishes MGS NID to relation data."""
+        """Leader unit publishes MGS NIDs to relation data."""
         model, rel = mock_model_with_relation
         model.app.planned_units.return_value = 1
         model.unit.is_leader.return_value = True
         model.unit.name = MGS_UNIT_NAME
         rel.load.return_value = None
         mocker.patch("lustre_peer.lustre_fs.oss_setup")
-        mocker.patch("lustre_peer.lustre_fs.get_nids", return_value=[MGS_NID])
+        mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
 
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
-        result = observer.mgs_nid_published()
+        result = observer.mgs_nids_published()
 
-        assert result == MGS_NID
+        assert result == MGS_NIDS
         assert rel.save.call_count == 2
 
         unit_data = rel.save.call_args_list[0][0][0]
         app_data = rel.save.call_args_list[1][0][0]
 
         assert unit_data.ready is True
-        assert app_data.mgs_nid == MGS_NID
+        assert app_data.mgs_nids == MGS_NIDS
         assert app_data.mgs_unit_name == MGS_UNIT_NAME
 
     def test_non_leader_raises(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
@@ -73,7 +74,7 @@ class TestMgsNidPublished:
 
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(lustre_peer.LustrePeerError, match="Non-leader"):
-            observer.mgs_nid_published()
+            observer.mgs_nids_published()
 
     def test_get_nid_fails(
         self, mocker: MockerFixture, mock_model_with_relation: tuple[MagicMock, MagicMock]
@@ -85,34 +86,51 @@ class TestMgsNidPublished:
         rel.load.return_value = None
         mocker.patch("lustre_peer.lustre_fs.oss_setup")
         mocker.patch(
-            "lustre_peer.lustre_fs.get_nids",
-            side_effect=LustreFilesystemError("test get_nids failed"),
+            "lustre_peer.lnet.get_nids",
+            side_effect=LNetError("test get_nids failed"),
         )
 
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(lustre_peer.LustrePeerError, match="Failed to determine MGS NID"):
-            observer.mgs_nid_published()
+            observer.mgs_nids_published()
+
+    def test_empty_nids(
+        self, mocker: MockerFixture, mock_model_with_relation: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Leader unit raises an error when no NIDs are configured."""
+        model, rel = mock_model_with_relation
+        model.unit.is_leader.return_value = True
+        model.unit.name = MGS_UNIT_NAME
+        rel.load.return_value = None
+        mocker.patch("lustre_peer.lustre_fs.oss_setup")
+        mocker.patch("lustre_peer.lnet.get_nids", return_value=[])
+
+        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
+        with pytest.raises(
+            lustre_peer.LustrePeerError, match="No LNet NIDs configured on this unit"
+        ):
+            observer.mgs_nids_published()
 
     def test_nid_already_published(
         self, mocker: MockerFixture, mock_model_with_relation: tuple[MagicMock, MagicMock]
     ) -> None:
-        """Leader unit does not overwrite existing MGS NID in relation data."""
+        """Leader unit does not overwrite existing MGS NIDs in relation data."""
         model, rel = mock_model_with_relation
         model.unit.is_leader.return_value = True
-        existing = lustre_peer.LustrePeerAppData(mgs_nid=MGS_NID, mgs_unit_name=MGS_UNIT_NAME)
+        existing = lustre_peer.LustrePeerAppData(mgs_nids=MGS_NIDS, mgs_unit_name=MGS_UNIT_NAME)
         rel.load.return_value = existing
 
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
-        result = observer.mgs_nid_published()
+        result = observer.mgs_nids_published()
 
-        assert result == MGS_NID
+        assert result == MGS_NIDS
         rel.save.assert_not_called()
 
 
 class TestOnRelationChanged:
     """_on_relation_changed() tests."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def oss_unit(
         self, mocker: MockerFixture, mock_model: MagicMock
     ) -> tuple[MagicMock, MagicMock]:
@@ -120,7 +138,7 @@ class TestOnRelationChanged:
         mock_model.app.planned_units.return_value = 1
         mock_model.unit.name = OSS_UNIT_NAME
 
-        app_data = lustre_peer.LustrePeerAppData(mgs_nid=MGS_NID, mgs_unit_name=MGS_UNIT_NAME)
+        app_data = lustre_peer.LustrePeerAppData(mgs_nids=MGS_NIDS, mgs_unit_name=MGS_UNIT_NAME)
         unit_data = lustre_peer.LustrePeerUnitData()
         mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=app_data)
         mocker.patch("lustre_peer.LustrePeerObserver.get_unit_data", return_value=unit_data)
@@ -142,7 +160,7 @@ class TestOnRelationChanged:
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         observer._on_relation_changed(mocker.MagicMock())
 
-        mock_oss.assert_called_once_with(LUSTRE_FSNAME, OSS_UNIT_NAME, MGS_NID)
+        mock_oss.assert_called_once_with(LUSTRE_FSNAME, OSS_UNIT_NAME, MGS_NIDS)
         assert mock_model.unit.status == expected_status
 
     def test_app_data_error(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
@@ -172,7 +190,7 @@ class TestOnRelationChanged:
         """MGS unit does not attempt to set up OSS."""
         mock_model.app.planned_units.return_value = 1
         mock_model.unit.name = MGS_UNIT_NAME
-        app_data = lustre_peer.LustrePeerAppData(mgs_nid=MGS_NID, mgs_unit_name=MGS_UNIT_NAME)
+        app_data = lustre_peer.LustrePeerAppData(mgs_nids=MGS_NIDS, mgs_unit_name=MGS_UNIT_NAME)
         mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=app_data)
         mock_oss = mocker.patch("lustre_peer.lustre_fs.oss_setup", autospec=True)
 
@@ -191,7 +209,9 @@ class TestOnRelationChanged:
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         observer._on_relation_changed(mocker.MagicMock())
 
-        assert model.unit.status == ops.BlockedStatus(lustre_peer.CharmStatuses.FAILED_OSS_SETUP)
+        assert model.unit.status == ops.BlockedStatus(
+            lustre_peer._LustrePeerStatus.FAILED_OSS_SETUP
+        )
 
     def test_set_unit_ready_failure(
         self, mocker: MockerFixture, oss_unit: tuple[MagicMock, MagicMock]
@@ -207,7 +227,7 @@ class TestOnRelationChanged:
         observer._on_relation_changed(mocker.MagicMock())
 
         assert model.unit.status == ops.BlockedStatus(
-            lustre_peer.CharmStatuses.FAILED_SET_UNIT_READY
+            lustre_peer._LustrePeerStatus.FAILED_SET_UNIT_READY
         )
 
     def test_publish_filesystem_info_failure(
@@ -226,7 +246,7 @@ class TestOnRelationChanged:
         observer._on_relation_changed(mocker.MagicMock())
 
         assert model.unit.status == ops.BlockedStatus(
-            lustre_peer.CharmStatuses.FAILED_PUBLISH_FILESYSTEM_INFO
+            lustre_peer._LustrePeerStatus.FAILED_PUBLISH_FILESYSTEM_INFO
         )
 
 
@@ -271,9 +291,9 @@ class TestTryPublishFilesystemInfo:
 
         charm = mocker.MagicMock()
         observer = lustre_peer.LustrePeerObserver(charm)
-        observer._try_publish_filesystem_info(MGS_NID, LUSTRE_FSNAME)
+        observer._try_publish_filesystem_info(MGS_NIDS, LUSTRE_FSNAME)
 
         charm.filesystem.set_info.assert_called_once()
         args, _ = charm.filesystem.set_info.call_args
-        assert args[0].mgs_ids == [MGS_NID]
+        assert args[0].mgs_ids == MGS_NIDS
         assert args[0].fs_name == LUSTRE_FSNAME

@@ -4,16 +4,11 @@
 
 """Lustre filesystem operations."""
 
-import json
 import logging
 import subprocess
 from pathlib import Path
 
 from constants import (
-    IP_EXECUTABLE,
-    LCTL_EXECUTABLE,
-    LNETCTL_EXECUTABLE,
-    LUSTRE_LNET_CONF,
     LUSTRE_MGS_MDT_DATASET_PREFIX,
     LUSTRE_MGS_MDT_MOUNTPOINT,
     LUSTRE_OST_DATASET_PREFIX,
@@ -27,36 +22,6 @@ from constants import (
 from errors import LustreFilesystemError
 
 _logger = logging.getLogger(__name__)
-
-
-def init() -> None:
-    """Initialize Lustre by bringing up LNet. Idempotent.
-
-    Raises:
-        LustreFilesystemError: If LNet configuration fails.
-    """
-    _ensure_lnet_tcp(_get_default_interface())
-    _persist_lnet_config()
-
-
-def get_nids() -> list[str]:
-    """Return all Lustre NIDs configured on this unit.
-
-    Returns:
-        A list of NID strings in format <address>@<LND protocol><lnd#>. Example: ["10.0.0.5@tcp"].
-        Empty if no NIDs are configured.
-
-    Raises:
-        LustreFilesystemError: If querying the NIDs fails.
-    """
-    try:
-        result = subprocess.run(
-            [LCTL_EXECUTABLE, "list_nids"], capture_output=True, text=True, check=True
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        raise LustreFilesystemError("Failed to query Lustre NIDs") from e
-
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
 def mgs_mds_setup(fsname: str) -> None:
@@ -90,13 +55,13 @@ def mgs_mds_setup(fsname: str) -> None:
     _logger.info("MGS+MDS on pool '%s' and dataset '%s' ready", pool, dataset)
 
 
-def oss_setup(fsname: str, unit_name: str, mgs_nid: str) -> None:
+def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str]) -> None:
     """Set up an OSS on this unit. Idempotent.
 
     Args:
         fsname: Lustre filesystem name.
         unit_name: Name of this unit.
-        mgs_nid: MGS NID to use for this OSS.
+        mgs_nids: MGS NIDs to use for this OSS.
 
     Raises:
         LustreFilesystemError: If OSS setup fails.
@@ -117,11 +82,12 @@ def oss_setup(fsname: str, unit_name: str, mgs_nid: str) -> None:
     dataset = f"{LUSTRE_OST_DATASET_PREFIX}{ost_index}"
     pool = f"{fsname}-{dataset}-pool"
 
+    mgs_nids_str = ",".join(mgs_nids)
     _logger.info(
-        "Ensuring this unit is running OSS on pool '%s' and dataset '%s' with MGS NID: '%s'",
+        "Ensuring this unit is running OSS on pool '%s' and dataset '%s' with MGS NIDs: '%s'",
         pool,
         dataset,
-        mgs_nid,
+        mgs_nids_str,
     )
 
     devices = _detect_devices(pool)
@@ -133,10 +99,12 @@ def oss_setup(fsname: str, unit_name: str, mgs_nid: str) -> None:
             f"Failed to create OST zpool '{pool}' with devices {devices}"
         ) from e
 
-    _lustre_target(fsname, pool, dataset, ost_index, mkfs_flags=["--ost", f"--mgsnode={mgs_nid}"])
+    _lustre_target(
+        fsname, pool, dataset, ost_index, mkfs_flags=["--ost", f"--mgsnode={mgs_nids_str}"]
+    )
     _mount(pool, dataset, Path(LUSTRE_OST_PARENT_DIRECTORY) / dataset)
 
-    _logger.info("OST index '%s' for MGS NID '%s' ready", ost_index, mgs_nid)
+    _logger.info("OST index '%s' for MGS NIDs '%s' ready", ost_index, mgs_nids_str)
 
 
 def _detect_devices(owner: str) -> list[str]:
@@ -293,78 +261,6 @@ def _mount(pool: str, dataset: str, mountpoint: Path) -> None:
         raise LustreFilesystemError(
             f"Failed to mount Lustre target {full_dataset_name} at {mountpoint}"
         ) from e
-
-
-def _ensure_lnet_tcp(interface: str) -> None:
-    """Ensure an LNet TCP network exists on the given interface. Idempotent.
-
-    Args:
-        interface: Name of the network interface.
-
-    Raises:
-        LustreFilesystemError: If configuring the LNet TCP network fails.
-    """
-    try:
-        result = subprocess.run([LNETCTL_EXECUTABLE, "net", "show", "--net", "tcp"])
-        if result.returncode != 0:
-            subprocess.run(
-                [LNETCTL_EXECUTABLE, "net", "add", "--net", "tcp", "--if", interface], check=True
-            )
-        # TODO: verify the tcp network is assigned to the correct interface?
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        raise LustreFilesystemError("Failed to configure LNet") from e
-
-
-def _get_default_interface() -> str:
-    """Return the default network interface name for this unit.
-
-    Returns:
-        The name of the default network interface.
-
-    Raises:
-        LustreFilesystemError: If querying or parsing the default network interface fails.
-    """
-    try:
-        result = subprocess.run(
-            [IP_EXECUTABLE, "-json", "route", "show", "default"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        raise LustreFilesystemError("Failed to query default network interface") from e
-
-    try:
-        routes = json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        raise LustreFilesystemError("Failed to parse default route data") from e
-
-    try:
-        return routes[0]["dev"]
-    except (IndexError, KeyError) as e:
-        raise LustreFilesystemError(
-            "Failed to extract default network interface from route data"
-        ) from e
-
-
-def _persist_lnet_config() -> None:
-    """Export and persist the current LNet configuration.
-
-    Raises:
-        LustreFilesystemError: If exporting or writing the LNet configuration fails.
-    """
-    try:
-        result = subprocess.check_output([LNETCTL_EXECUTABLE, "export", "--backup"], text=True)
-
-        # Write to temp file then atomically replace existing config. Avoids leaving partial config
-        # file if write process is interrupted.
-        tmp = LUSTRE_LNET_CONF.with_name(f".{LUSTRE_LNET_CONF.name}.tmp")
-        tmp.unlink(missing_ok=True)  # Clean up any failed previous attempt.
-        tmp.touch(mode=0o600)
-        tmp.write_text(result)
-        tmp.replace(LUSTRE_LNET_CONF)
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
-        raise LustreFilesystemError("Failed to write LNet configuration data") from e
 
 
 def _pool_exists(pool: str) -> bool:

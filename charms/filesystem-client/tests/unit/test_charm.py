@@ -100,3 +100,25 @@ def test_enable_lustre_sets_manager_flag(
     assert state_out.unit_status == testing.BlockedStatus(
         "Missing `mountpoint` config or `mount` integration"
     )
+
+
+def test_lnet_networks_config_parsed(
+    ctx: testing.Context, mock_mounts_manager: MagicMock
+) -> None:
+    """The lnet-networks config is parsed before being passed to the manager."""
+    state_in = testing.State(
+        config={
+            "enable-lustre": True,
+            "lnet-networks": "tcp=eth0; o2ib=ib0,ib1",
+        }
+    )
+    mock_mounts_manager.supported.return_value = True
+    mock_mounts_manager.is_setup.return_value = True
+    mock_mounts_manager.mounts = MagicMock()
+
+    ctx.run(ctx.on.config_changed(), state_in)
+
+    assert mock_mounts_manager.lnet_networks == {
+        "tcp": ["eth0"],
+        "o2ib": ["ib0", "ib1"],
+    }

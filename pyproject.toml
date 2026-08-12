@@ -7,6 +7,7 @@ dependencies = [
     "charmlibs-apt ~= 1.0",
     "charmed-hpc-libs[ops] ~= 0.1",
     "pydantic>=2",
+    "lustre-ops",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +33,10 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["charms/*"]
+members = ["charms/*", "internal/*"]
+
+[tool.uv.sources]
+lustre-ops = { workspace = true }
 
 [tool.repository]
 
@@ -41,7 +45,8 @@ members = ["charms/*"]
 branch = true
 include = [
     "_build/**/src/*",
-    "_build/filesystem-client/lib/charms/filesystem_client/*"
+    "_build/filesystem-client/lib/charms/filesystem_client/*",
+    "internal/**/src/*",
 ]
 omit = [
     "_build/libs/*"

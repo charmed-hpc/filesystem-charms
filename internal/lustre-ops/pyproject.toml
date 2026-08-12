@@ -1,0 +1,12 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details
+
+[project]
+name = "lustre-ops"
+version = "0.0.1"
+requires-python = "==3.14.*"
+dependencies = ["charmlibs-apt", "pydantic", "pyyaml"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

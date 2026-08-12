@@ -7,6 +7,7 @@ members = [
     "cephfs-server-proxy",
     "filesystem-client",
     "filesystems",
+    "lustre-ops",
     "lustre-server",
     "lustre-server-proxy",
     "nfs-server-proxy",
@@ -125,6 +126,7 @@ source = { virtual = "charms/filesystem-client" }
 dependencies = [
     { name = "charmed-hpc-libs", extra = ["ops"] },
     { name = "charmlibs-apt" },
+    { name = "lustre-ops" },
     { name = "ops" },
 ]
 
@@ -132,6 +134,7 @@ dependencies = [
 requires-dist = [
     { name = "charmed-hpc-libs", extras = ["ops"] },
     { name = "charmlibs-apt" },
+    { name = "lustre-ops", editable = "internal/lustre-ops" },
     { name = "ops" },
 ]
 
@@ -142,6 +145,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "charmed-hpc-libs", extra = ["ops"] },
     { name = "charmlibs-apt" },
+    { name = "lustre-ops" },
     { name = "ops" },
     { name = "pydantic" },
 ]
@@ -168,6 +172,7 @@ requires-dist = [
     { name = "codespell", marker = "extra == 'dev'" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "jubilant", marker = "extra == 'dev'" },
+    { name = "lustre-ops", editable = "internal/lustre-ops" },
     { name = "ops", specifier = "~=3.0" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2" },
@@ -203,12 +208,30 @@ wheels = [
 ]
 
 [[package]]
+name = "lustre-ops"
+version = "0.0.1"
+source = { editable = "internal/lustre-ops" }
+dependencies = [
+    { name = "charmlibs-apt" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "charmlibs-apt" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[[package]]
 name = "lustre-server"
 version = "0.0.1"
 source = { virtual = "charms/lustre-server" }
 dependencies = [
     { name = "charmed-hpc-libs", extra = ["ops"] },
     { name = "charmlibs-apt" },
+    { name = "lustre-ops" },
     { name = "ops" },
     { name = "pydantic" },
 ]
@@ -217,6 +240,7 @@ dependencies = [
 requires-dist = [
     { name = "charmed-hpc-libs", extras = ["ops"] },
     { name = "charmlibs-apt" },
+    { name = "lustre-ops", editable = "internal/lustre-ops" },
     { name = "ops" },
     { name = "pydantic" },
 ]

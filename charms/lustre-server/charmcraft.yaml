@@ -4,9 +4,9 @@
 name: lustre-server
 type: charm
 title: Lustre Parallel File System
-summary: Provides the Lustre parallel file system.
+summary: Charmed operator for the Lustre parallel file system.
 description: |
-  This charm enables the deployment and management of the Lustre parallel file system.
+  This charm deploys and manages the Lustre parallel file system.
 
   This single charm provides all Lustre server components: MGS (Management Server), MDS (Metadata
   Server), and OSS (Object Storage Server) and intelligently provisions each. Storage targets are
@@ -17,6 +17,15 @@ description: |
 
   It is useful for HPC and data-intensive teams looking for a high-throughput, scalable, distributed
   file system.
+
+  The charm is a core component of Charmed HPC. For more information about Charmed HPC, view the
+  [full documentation](https://ubuntu.com/hpc/docs/latest).
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+  documentation: https://ubuntu.com/hpc/docs/latest
+  website: https://ubuntu.com/hpc
+  source: https://github.com/canonical/filesystem-charms
+  issues: https://github.com/canonical/filesystem-charms/issues
 
 platforms:
   ubuntu@26.04:amd64:
@@ -43,3 +52,22 @@ peers:
 provides:
   filesystem:
     interface: filesystem_info
+
+config:
+  options:
+    lnet-networks:
+      type: string
+      default: ""
+      description: |
+        LNet network configuration. Syntax:
+
+        "tcp=eth0; o2ib0=ib0,ib1"
+
+        Each network is "<name>=<iface>[,<iface>...]" where <name> is the full LNet network name
+        (examples: tcp0, o2ib1). Multiple interfaces form a multi-rail network.
+
+        Leave empty to auto-detect a setup of a "tcp" network on the default route interface and an
+        "o2ib" network on all RDMA devices.
+
+        This configuration is used only when the charm is first deployed. Changes made to this value
+        after deployment will not be applied.

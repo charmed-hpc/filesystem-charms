@@ -127,7 +127,7 @@ def _peer_relation_app_data_check(data: "LustrePeerAppData") -> None:
     Raises:
         LustreStateError: If the MGS peer app data has not been published.
     """
-    if data.mgs_unit_name is None or data.mgs_nid is None:
+    if data.mgs_unit_name is None or not data.mgs_nids:
         status = ops.WaitingStatus(CharmStatuses.WAITING_PEER_DATA)
         raise LustreStateError(status)
 

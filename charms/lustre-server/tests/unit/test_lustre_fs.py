@@ -3,8 +3,6 @@
 
 """Unit tests for lustre_fs.py — Lustre filesystem operations."""
 
-import json
-import stat
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -12,8 +10,6 @@ from unittest.mock import MagicMock
 import lustre_fs
 import pytest
 from constants import (
-    LCTL_EXECUTABLE,
-    LNETCTL_EXECUTABLE,
     LUSTRE_MGS_MDT_DATASET_PREFIX,
     LUSTRE_OST_DATASET_PREFIX,
     MKFS_LUSTRE_EXECUTABLE,
@@ -30,63 +26,16 @@ def mock_run(mocker: MockerFixture) -> MagicMock:
     return mocker.patch("lustre_fs.subprocess.run")
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def pool_missing(mocker: MockerFixture) -> None:
     """Mock _pool_exists to return False."""
     mocker.patch("lustre_fs._pool_exists", return_value=False)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def pool_exists(mocker: MockerFixture) -> None:
     """Mock _pool_exists to return True."""
     mocker.patch("lustre_fs._pool_exists", return_value=True)
-
-
-class TestInit:
-    """init() tests."""
-
-    def test_successful_init(self, mocker: MockerFixture) -> None:
-        """Successful init() call."""
-        mock_ensure = mocker.patch("lustre_fs._ensure_lnet_tcp", autospec=True)
-        mock_persist = mocker.patch("lustre_fs._persist_lnet_config", autospec=True)
-        mocker.patch("lustre_fs._get_default_interface", return_value="eth0")
-
-        lustre_fs.init()
-
-        mock_ensure.assert_called_once_with("eth0")
-        mock_persist.assert_called_once()
-
-
-class TestGetNids:
-    """get_nids() tests."""
-
-    def test_success(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Returns a list of NIDs from lctl output."""
-        mock_run.return_value.stdout = "10.0.0.5@tcp\n10.0.0.6@tcp\n"
-
-        assert lustre_fs.get_nids() == ["10.0.0.5@tcp", "10.0.0.6@tcp"]
-
-    def test_empty_output(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Returns an empty list when no NIDs are configured."""
-        mock_run.return_value.stdout = ""
-
-        assert lustre_fs.get_nids() == []
-
-    def test_lctl_run_error(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Lctl command fails."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, LCTL_EXECUTABLE)
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs.get_nids()
-        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
-
-    def test_lctl_not_found(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Lctl executable is not found."""
-        mock_run.side_effect = FileNotFoundError(1, "/bad/path/to/lctl")
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs.get_nids()
-        assert isinstance(excinfo.value.__cause__, FileNotFoundError)
 
 
 class TestMgsMdsSetup:
@@ -158,60 +107,6 @@ class TestOssSetup:
         with pytest.raises(LustreFilesystemError) as excinfo:
             lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID)
         assert isinstance(excinfo.value.__cause__, ValueError)
-
-
-class TestEnsureLnetTcp:
-    """_ensure_lnet_tcp() tests."""
-
-    def test_creates_when_missing(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Adds interface to TCP network when it is not already present."""
-        mock_run.return_value.returncode = 1  # net show fails
-
-        lustre_fs._ensure_lnet_tcp("eth0")
-
-        assert mock_run.call_count == 2
-        add_call = mock_run.call_args_list[1]
-        assert add_call[0][0] == [LNETCTL_EXECUTABLE, "net", "add", "--net", "tcp", "--if", "eth0"]
-
-    def test_skips_when_exists(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Skips adding the TCP network when it is already present."""
-        mock_run.return_value.returncode = 0
-        lustre_fs._ensure_lnet_tcp("eth0")
-        mock_run.assert_called_once()  # only net show, no net add
-
-    def test_lnetctl_failure(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Lnetctl failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, LNETCTL_EXECUTABLE)
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._ensure_lnet_tcp("eth0")
-        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
-
-
-class TestPersistLnetConfig:
-    """_persist_lnet_config() tests."""
-
-    def test_successful_export(self, mocker: MockerFixture, tmp_path: Path) -> None:
-        """Exports the LNet configuration to a file with 0600 permissions."""
-        conf_path = tmp_path / "lnet.conf"
-        mocker.patch("lustre_fs.LUSTRE_LNET_CONF", conf_path)
-        mocker.patch("lustre_fs.subprocess.check_output", return_value="config data")
-
-        lustre_fs._persist_lnet_config()
-
-        assert conf_path.read_text() == "config data"
-        assert stat.S_IMODE(conf_path.stat().st_mode) == 0o600
-
-    def test_export_failure(self, mocker: MockerFixture) -> None:
-        """Lnetctl export failure."""
-        mocker.patch(
-            "lustre_fs.subprocess.check_output",
-            side_effect=subprocess.CalledProcessError(1, LNETCTL_EXECUTABLE),
-        )
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._persist_lnet_config()
-        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
 
 
 class TestMgtMdtZpool:
@@ -312,12 +207,12 @@ class TestLustreTarget:
     DATASET = "mgsmdt0"
     FULL_DATASET = f"{POOL}/{DATASET}"
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def target_missing(self, mocker: MockerFixture) -> None:
         """Mock _target_exists to return False."""
         mocker.patch("lustre_fs._target_exists", return_value=False)
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def target_exists(self, mocker: MockerFixture) -> None:
         """Mock _target_exists to return True."""
         mocker.patch("lustre_fs._target_exists", return_value=True)
@@ -439,48 +334,6 @@ class TestDetectDevices:
 
         assert len(devices) == 4
         mock_run.assert_not_called()
-
-
-class TestGetDefaultInterface:
-    """_get_default_interface() tests."""
-
-    def test_success(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Successfully retrieves the default network interface."""
-        mock_run.return_value.stdout = json.dumps([{"dev": "eth0"}])
-
-        assert lustre_fs._get_default_interface() == "eth0"
-
-    def test_ip_run_error(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Ip command fails."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, "ip")
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._get_default_interface()
-        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
-
-    def test_bad_json(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Ip command returns invalid JSON."""
-        mock_run.return_value.stdout = "not json"
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._get_default_interface()
-        assert isinstance(excinfo.value.__cause__, json.JSONDecodeError)
-
-    def test_missing_json_data(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Ip command returns empty JSON array."""
-        mock_run.return_value.stdout = json.dumps([])
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._get_default_interface()
-        assert isinstance(excinfo.value.__cause__, IndexError)
-
-    def test_missing_dev_key(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Ip command returns JSON without 'dev' key."""
-        mock_run.return_value.stdout = json.dumps([{"not_dev": "eth0"}])
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._get_default_interface()
-        assert isinstance(excinfo.value.__cause__, KeyError)
 
 
 class TestPoolExists:

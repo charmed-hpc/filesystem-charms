@@ -95,12 +95,12 @@ class TestCommonStatus:
     def test_all_pass(self, mocker: MockerFixture) -> None:
         """All common checks pass, no status change."""
         mocker.patch("state._kernel_modules_check")
-        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nid="10.0.0.5@tcp")
+        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nids=["10.0.0.5@tcp"])
         assert state._common_check(data) is None
 
     def test_peer_data_missing(self) -> None:
         """Peer data is missing."""
-        data = LustrePeerAppData(mgs_unit_name=None, mgs_nid=None)
+        data = LustrePeerAppData(mgs_unit_name=None, mgs_nids=[])
 
         with pytest.raises(LustreStateError) as e:
             state._common_check(data)
@@ -110,7 +110,7 @@ class TestCommonStatus:
         """One of the required modules is missing."""
         expected_status = ops.BlockedStatus("test modules missing status")
         mocker.patch("state._kernel_modules_check", side_effect=LustreStateError(expected_status))
-        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nid="10.0.0.5@tcp")
+        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nids=["10.0.0.5@tcp"])
 
         with pytest.raises(LustreStateError) as e:
             state._common_check(data)
@@ -170,30 +170,30 @@ class TestOssStatus:
 class TestCheckLustre:
     """Tests for top-level check_lustre."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def mock_charm(self, mocker: MockerFixture) -> MagicMock:
         """Mock charm with unit and peer data."""
         charm = mocker.MagicMock()
         charm.unit.status = ops.ActiveStatus()
-        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nid="10.0.0.5@tcp")
+        data = LustrePeerAppData(mgs_unit_name="lustre/0", mgs_nids=["10.0.0.5@tcp"])
         charm.peers.get_app_data.return_value = data
         return charm
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def mgs_mds_unit(self, mocker: MockerFixture, mock_charm: MagicMock) -> MagicMock:
         """Mock charm configured as the MGS+MDS unit with common checks passing."""
         mock_charm.model.unit.name = "lustre/0"
         mocker.patch("state._common_check", return_value=None)
         return mock_charm
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def oss_unit(self, mocker: MockerFixture, mock_charm: MagicMock) -> MagicMock:
         """Mock charm configured as an OSS unit with common checks passing."""
         mock_charm.model.unit.name = "lustre/1"
         mocker.patch("state._common_check", return_value=None)
         return mock_charm
 
-    @pytest.fixture
+    @pytest.fixture(scope="function")
     def existing_blocked(self, mock_charm: MagicMock) -> ops.BlockedStatus:
         """Set mock charm to an existing BlockedStatus and return that status."""
         existing = ops.BlockedStatus("existing error")

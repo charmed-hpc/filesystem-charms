@@ -15,6 +15,8 @@ import pydantic
 from charms.filesystem_client.v0.filesystem_info import LustreInfo
 from constants import LUSTRE_FSNAME
 from errors import LustreFilesystemError, LustrePeerError
+from lustre_ops import lnet
+from lustre_ops.errors import LNetError
 from state import check_lustre
 
 if TYPE_CHECKING:
@@ -25,8 +27,8 @@ _logger = logging.getLogger(__name__)
 PEER_RELATION = "lustre-peer"
 
 
-class CharmStatuses(StrEnum):
-    """Charm status messages."""
+class _LustrePeerStatus(StrEnum):
+    """Charm status messages for the Lustre peer observer."""
 
     FAILED_OSS_SETUP = "Failed to set up OSS"
     FAILED_PUBLISH_FILESYSTEM_INFO = "Failed to publish filesystem info to peer relation"
@@ -37,12 +39,12 @@ class LustrePeerAppData(pydantic.BaseModel):
     """App-level data written by the leader to the peer relation databag.
 
     Attributes:
-        mgs_nid: The LNet NID of the MGS unit. Example: "10.0.0.5@tcp".
+        mgs_nids: The LNet NIDs of the MGS unit. Example: ["10.0.0.5@tcp"].
         mgs_unit_name: The Juju name for the MGS unit. Example: "lustre/0".
     """
 
-    mgs_nid: str | None = pydantic.Field(
-        default=None, description="LNet NID of the MGS unit. Example: '10.0.0.5@tcp'."
+    mgs_nids: list[str] = pydantic.Field(
+        default_factory=list, description="LNet NIDs of the MGS unit. Example: ['10.0.0.5@tcp']."
     )
     mgs_unit_name: str | None = pydantic.Field(
         default=None, description="Juju name for the MGS unit. Example: 'lustre/0'."
@@ -71,42 +73,44 @@ class LustrePeerObserver(ops.Object):
             charm.on[PEER_RELATION].relation_changed, self._on_relation_changed
         )
 
-    def mgs_nid_published(self) -> str:
+    def mgs_nids_published(self) -> list[str]:
         """Publish this unit as the MGS if no MGS has been assigned yet.
 
         Returns:
-            The published MGS NID string.
+            The published MGS NID strings.
 
         Raises:
-            LustrePeerError: If an error occurs publishing the MGS NID.
+            LustrePeerError: If an error occurs publishing the MGS NIDs.
         """
         if not self.model.unit.is_leader():
             raise LustrePeerError("Non-leader attempted to publish MGS NID")
 
         # Never overwrite. The original MGS unit must remain stable across leader re-elections.
         data = self.get_app_data()
-        if data.mgs_unit_name and data.mgs_nid:
+        if data.mgs_unit_name and data.mgs_nids:
             _logger.info(
-                "MGS already active on %s with NID %s. skipping publication",
+                "MGS already active on %s with NIDs %s. skipping publication",
                 data.mgs_unit_name,
-                data.mgs_nid,
+                data.mgs_nids,
             )
-            return data.mgs_nid
+            return data.mgs_nids
 
         try:
-            # TODO: support multiple NIDs. MVP scoped to a single NID.
-            mgs_nid = lustre_fs.get_nids()[0]
-        except (LustreFilesystemError, IndexError) as e:
+            mgs_nids = lnet.get_nids()
+        except LNetError as e:
             raise LustrePeerError("Failed to determine MGS NID") from e
 
-        data.mgs_nid = mgs_nid
+        if not mgs_nids:
+            raise LustrePeerError("No LNet NIDs configured on this unit")
+
+        data.mgs_nids = mgs_nids
         data.mgs_unit_name = self.model.unit.name
 
         self._set_unit_ready()
         self.set_app_data(data)
-        self._try_publish_filesystem_info(mgs_nid, LUSTRE_FSNAME)
-        _logger.info("Published MGS NID %s for unit %s", data.mgs_nid, data.mgs_unit_name)
-        return data.mgs_nid
+        self._try_publish_filesystem_info(mgs_nids, LUSTRE_FSNAME)
+        _logger.info("Published MGS NIDs %s for unit %s", data.mgs_nids, data.mgs_unit_name)
+        return data.mgs_nids
 
     def get_app_data(self) -> LustrePeerAppData:
         """Return the application data in the peer relation databag.
@@ -168,24 +172,24 @@ class LustrePeerObserver(ops.Object):
             _logger.warning("Failed to get peer relation data: %s", e)
             return
 
-        if data.mgs_unit_name is None or data.mgs_nid is None:
+        if data.mgs_unit_name is None or not data.mgs_nids:
             _logger.warning("MGS data not yet published. cannot configure Lustre services.")
             return
 
         # OSS service must not be enabled on MGS+MDS unit
         if self.model.unit.name != data.mgs_unit_name:
             try:
-                lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nid)
+                lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids)
             except LustreFilesystemError as e:
                 _logger.exception("failed to set up OSS: %s", e)
-                self.model.unit.status = ops.BlockedStatus(CharmStatuses.FAILED_OSS_SETUP)
+                self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_OSS_SETUP)
                 return
 
         try:
             self._set_unit_ready()
         except LustrePeerError as e:
             _logger.exception("failed to set unit ready: %s", e)
-            self.model.unit.status = ops.BlockedStatus(CharmStatuses.FAILED_SET_UNIT_READY)
+            self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_SET_UNIT_READY)
             return
 
         if self.model.unit.is_leader():
@@ -203,11 +207,11 @@ class LustrePeerObserver(ops.Object):
             # the publish attempt occurs after the unit sets itself ready, so no further event is
             # needed.
             try:
-                self._try_publish_filesystem_info(data.mgs_nid, LUSTRE_FSNAME)
+                self._try_publish_filesystem_info(data.mgs_nids, LUSTRE_FSNAME)
             except LustrePeerError as e:
                 _logger.exception("failed to publish filesystem info: %s", e)
                 self.model.unit.status = ops.BlockedStatus(
-                    CharmStatuses.FAILED_PUBLISH_FILESYSTEM_INFO
+                    _LustrePeerStatus.FAILED_PUBLISH_FILESYSTEM_INFO
                 )
                 return
 
@@ -251,11 +255,11 @@ class LustrePeerObserver(ops.Object):
         data.ready = True
         self.set_unit_data(data)
 
-    def _try_publish_filesystem_info(self, mgs_nid: str, fs_name: str) -> None:
+    def _try_publish_filesystem_info(self, mgs_nids: list[str], fs_name: str) -> None:
         """Publish Lustre info to the filesystem relation only if all units in the cluster are ready."""
         if not self._all_units_ready():
             _logger.debug("not all units ready yet, waiting to set filesystem info")
             return
 
         _logger.info("all units report ready, publishing filesystem info")
-        self._charm.filesystem.set_info(LustreInfo(mgs_ids=[mgs_nid], fs_name=fs_name))
+        self._charm.filesystem.set_info(LustreInfo(mgs_ids=mgs_nids, fs_name=fs_name))

@@ -225,7 +225,7 @@ class Repository:
             self.public_packages = [
                 pkg
                 for path in PUBLIC_PKGS_PATH.iterdir()
-                if (pkg := load_package(path) is not None)
+                if (pkg := load_package(path)) is not None
             ]
         except FileNotFoundError:
             # `PUBLIC_PKGS_PATH` does not exist, so we don't have any private packages.

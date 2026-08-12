@@ -90,3 +90,19 @@ config:
       default: false
       description: Enable support for mounting Lustre filesystems.
       type: boolean
+    lnet-networks:
+      type: string
+      default: ""
+      description: |
+        LNet network configuration. Syntax:
+
+        "tcp=eth0; o2ib0=ib0,ib1"
+
+        Each network is "<name>=<iface>[,<iface>...]" where <name> is the full LNet network name
+        (examples: tcp0, o2ib1). Multiple interfaces form a multi-rail network.
+
+        Leave empty to auto-detect a setup of a "tcp" network on the default route interface and an
+        "o2ib" network on all RDMA devices.
+
+        This configuration is used only when the charm is first deployed. Changes made to this value
+        after deployment will not be applied.

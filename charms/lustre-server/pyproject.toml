@@ -5,7 +5,7 @@
 name = "lustre-server"
 version = "0.0.1"
 requires-python = "==3.14.*"
-dependencies = ["ops", "pydantic", "charmlibs-apt", "charmed-hpc-libs[ops]"]
+dependencies = ["ops", "pydantic", "charmlibs-apt", "charmed-hpc-libs[ops]", "lustre-ops"]
 
 [tool.repository]
 libraries = [
