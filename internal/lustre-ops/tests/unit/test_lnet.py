@@ -340,9 +340,9 @@ class TestParseNetworkConfig:
         "spec",
         [pytest.param("", id="empty_string"), pytest.param("   ", id="whitespace_only")],
     )
-    def test_empty_yields_none(self, spec: str) -> None:
-        """An empty or whitespace-only spec yields ``None``."""
-        assert lnet.parse_network_config(spec) is None
+    def test_empty_spec(self, spec: str) -> None:
+        """An empty or whitespace-only spec yields an empty dictionary."""
+        assert lnet.parse_network_config(spec) == {}
 
     @pytest.mark.parametrize(
         ("spec", "match"),

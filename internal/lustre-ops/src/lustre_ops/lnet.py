@@ -51,10 +51,10 @@ class _NetShowOutput(BaseModel):
     net: list[_Net] | None = None
 
 
-def init(networks: dict[str, list[str]] | None = None) -> None:
+def init(networks: dict[str, list[str]] = {}) -> None:
     """Initialize LNet on this unit. Idempotent.
 
-    When ``networks`` is ``None``, LNet networks are auto-configured based on available interfaces
+    When ``networks`` is empty, LNet networks are auto-configured based on available interfaces
     on the host: a ``tcp`` network is configured on the default-route interface and an ``o2ib``
     network is configured on all detected RDMA netdevs.
 
@@ -69,7 +69,7 @@ def init(networks: dict[str, list[str]] | None = None) -> None:
         LNetAutodetectError: If auto-detection finds no usable network interfaces.
         LNetError: If any other LNet operation fails.
     """
-    if networks is None:
+    if not networks:
         networks = detect_networks()
         _logger.info("LNet networks determined by auto-detection: %s", networks)
         if not networks:
@@ -99,7 +99,7 @@ def get_nids() -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def parse_network_config(spec: str) -> dict[str, list[str]] | None:
+def parse_network_config(spec: str) -> dict[str, list[str]]:
     """Parse an operator-supplied LNet network specification string.
 
     The string is a semicolon-separated list of networks of the form:
@@ -117,15 +117,15 @@ def parse_network_config(spec: str) -> dict[str, list[str]] | None:
         spec: The specification string.
 
     Returns:
-        A mapping from LNet network name to its interfaces. `None` if an empty/whitespace-only spec
-        is provided.
+        A mapping from LNet network name to its interfaces. An empty dictionary
+        if an empty/whitespace-only spec is provided.
 
     Raises:
         LNetParseError: If the specification is malformed.
     """
     spec = spec.strip()
     if not spec:
-        return None
+        return {}
 
     networks: dict[str, list[str]] = {}
     for token in spec.split(";"):
