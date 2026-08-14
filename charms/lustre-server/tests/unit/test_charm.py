@@ -80,10 +80,10 @@ class TestCharmInstall:
         mock_apt: MagicMock,
         mock_lnet_init: MagicMock,
     ) -> None:
-        """An empty lnet-networks config triggers auto-detection (networks=None)."""
+        """An empty lnet-networks config triggers auto-detection."""
         ctx.run(ctx.on.install(), testing.State())
 
-        mock_lnet_init.assert_called_once_with(networks=None)
+        mock_lnet_init.assert_called_once_with(networks={})
 
     def test_repo_setup_fails(
         self,
