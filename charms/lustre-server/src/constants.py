@@ -16,7 +16,12 @@ LUSTRE_OST_DATASET_PREFIX = "ost"
 LUSTRE_OST_PARENT_DIRECTORY = "/mnt"
 
 # zfsutils-linux is needed but is not an explicit dependency of the Lustre debs.
-LUSTRE_PACKAGES = ["lustre-server-modules-dkms", "lustre-server-utils", "zfsutils-linux"]
+LUSTRE_PACKAGES = [
+    "lustre-server-modules-dkms",
+    "lustre-server-utils",
+    "zfsutils-linux",
+    "rdma-core",
+]
 
 MKFS_LUSTRE_EXECUTABLE = "/usr/sbin/mkfs.lustre"
 MOUNT_EXECUTABLE = "/usr/bin/mount"
