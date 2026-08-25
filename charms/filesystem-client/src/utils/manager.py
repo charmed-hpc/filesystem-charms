@@ -234,7 +234,7 @@ class MountsManager:
 
 def _get_endpoint_and_opts(info: FilesystemInfo, enable_lustre: bool) -> tuple[str, list[str]]:
     match info:
-        case NfsInfo(hostname=hostname, port=port, path=path):
+        case NfsInfo(hostname=hostname, port=port, path=path, version=version):
             try:
                 IPv6Address(hostname)
                 # Need to add brackets if the hostname is IPv6
@@ -246,6 +246,8 @@ def _get_endpoint_and_opts(info: FilesystemInfo, enable_lustre: bool) -> tuple[s
             options = ["fstype=nfs"]
             if port:
                 options.append(f"port={port}")
+            if version:
+                options.append(f"vers={version}")
         case CephfsInfo(
             fsid=fsid, name=name, path=path, monitor_hosts=mons, user=user, key=secret
         ):

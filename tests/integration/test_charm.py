@@ -170,6 +170,21 @@ def test_nfs(juju: jubilant.Juju) -> None:
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
 
+    # Force clients to mount using NFSv4 and verify that the mounts are updated.
+    juju.config(NFS_SERVER_PROXY, values={"force-v4": "true"})
+    juju.wait(
+        lambda status: jubilant.all_active(
+            status, NFS_SERVER_PROXY, FILESYSTEM_CLIENT, *MOUNT_REQUIRERS
+        ),
+        error=lambda status: jubilant.any_error(
+            status, NFS_SERVER_PROXY, FILESYSTEM_CLIENT, MOUNT_PROVIDER
+        ),
+    )
+
+    check_files(juju, "ubuntu/0", "/nfs")
+    for app in MOUNT_REQUIRERS:
+        check_files(juju, f"{app}/0", f"/{app}")
+
     # Remove NFS relations after testing
     juju.remove_relation(f"{FILESYSTEM_CLIENT}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")
     juju.remove_relation(f"{MOUNT_PROVIDER}:filesystem", f"{NFS_SERVER_PROXY}:filesystem")

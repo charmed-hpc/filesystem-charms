@@ -7,6 +7,7 @@
 import pytest
 from charms.filesystem_client.v0.filesystem_info import (
     FilesystemRequires,
+    NfsInfo,
     _hostinfo,
 )
 from ops import CharmBase
@@ -55,3 +56,21 @@ class TestFilesystemInfo:
     def test_hostinfo(self, host: str, parsed: tuple[str, int | None]):
         """Test the _hostinfo utility function."""
         assert _hostinfo(host) == parsed
+
+    @pytest.mark.parametrize(
+        ("uri", "info"),
+        [
+            (
+                "nfs://(192.168.1.1)/data",
+                NfsInfo(hostname="192.168.1.1", port=None, path="/data"),
+            ),
+            (
+                "nfs://(192.168.1.1%3A2049)/data?version=4",
+                NfsInfo(hostname="192.168.1.1", port=2049, path="/data", version="4"),
+            ),
+        ],
+    )
+    def test_nfs_info_uri_round_trip(self, uri: str, info: NfsInfo):
+        """Test roundtrip from `NfsInfo` to URI string."""
+        assert NfsInfo.from_uri(uri, None) == info
+        assert info.to_uri(None) == uri
