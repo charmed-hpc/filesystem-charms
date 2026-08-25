@@ -54,7 +54,9 @@ Now deploy the NFS server proxy operator with the filesystem client operator and
 ```shell
 juju deploy nfs-server-proxy --channel latest/edge \
     --config hostname=<IPv4 address of LXD virtual machine> \
-    --config path=/data
+    --config path=/data \
+    --config force-v4=true   # optional: force clients to mount using NFSv4
+
 juju deploy filesystem-client data --config mountpoint=/data
 juju deploy ubuntu --base ubuntu@26.04
 juju integrate data:juju-info ubuntu:juju-info

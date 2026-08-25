@@ -65,3 +65,7 @@ config:
     path:
       description: Exported path of the NFS share.
       type: string
+    force-v4:
+      description: Force clients to mount using NFSv4.
+      type: boolean
+      default: false

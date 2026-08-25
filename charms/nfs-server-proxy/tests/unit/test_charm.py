@@ -24,7 +24,7 @@ def test_config_no_path():
 
 
 def test_config_no_port():
-    """Test config-changed handler when there is no configured path."""
+    """Test config-changed handler when there is no configured port."""
     context = testing.Context(NFSServerProxyCharm)
     state = testing.State(config={"hostname": "127.0.0.1", "path": "/srv"})
     out = context.run(context.on.config_changed(), state)
@@ -37,7 +37,7 @@ def test_config_full():
         endpoint="server-peers",
     )
     state = testing.State(
-        config={"hostname": "127.0.0.1", "path": "/srv", "port": 1234},
+        config={"hostname": "127.0.0.1", "path": "/srv", "port": 1234, "force-v4": True},
         relations={rel},
         leader=True,
     )
@@ -53,3 +53,4 @@ def test_config_full():
     assert info.hostname == "127.0.0.1"
     assert info.port == 1234
     assert info.path == "/srv"
+    assert info.version == "4"

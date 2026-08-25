@@ -138,7 +138,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 _logger = logging.getLogger(__name__)
 
@@ -348,6 +348,9 @@ class NfsInfo(FilesystemInfo):
     path: str
     """Path exported by the NFS server."""
 
+    version: Optional[str] = None
+    """Minimum supported NFS version."""
+
     @classmethod
     def from_uri(cls, uri: str, _model: Model) -> "NfsInfo":
         """See :py:meth:`FilesystemInfo.from_uri` for documentation on this method."""
@@ -366,11 +369,10 @@ class NfsInfo(FilesystemInfo):
         if len(info.hosts) > 1:
             _logger.info("multiple hosts specified. selecting the first one")
 
-        if info.options:
-            _logger.warning("ignoring endpoint options on nfs endpoint info")
+        version = info.options.get("version")
 
         hostname, port = _hostinfo(info.hosts[0])
-        return NfsInfo(hostname=hostname, port=port, path=path)
+        return NfsInfo(hostname=hostname, port=port, path=path, version=version)
 
     def to_uri(self, _model: Model) -> str:
         """See :py:meth:`FilesystemInfo.to_uri` for documentation on this method."""
@@ -382,7 +384,9 @@ class NfsInfo(FilesystemInfo):
 
         hosts = [f"{host}:{self.port}" if self.port else host]
 
-        return str(_UriData(scheme=self.filesystem_type(), hosts=hosts, path=self.path))
+        options = {"version": self.version} if self.version else {}
+
+        return str(_UriData(scheme=self.filesystem_type(), hosts=hosts, path=self.path, options=options))
 
     @classmethod
     def filesystem_type(cls) -> str:

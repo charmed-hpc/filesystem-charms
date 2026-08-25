@@ -32,13 +32,10 @@ class NFSServerProxyCharm(ops.CharmBase):
             return
 
         port = cast(int | None, self.config.get("port"))
+        force_v4 = cast(bool, self.config.get("force-v4"))
 
         self._filesystem.set_info(
-            NfsInfo(
-                hostname=hostname,
-                path=path,
-                port=port,
-            )
+            NfsInfo(hostname=hostname, path=path, port=port, version="4" if force_v4 else None)
         )
 
         self.unit.status = ops.ActiveStatus()
