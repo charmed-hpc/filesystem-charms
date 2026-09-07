@@ -3,7 +3,7 @@ name = "filesystems"
 version = "0.0"
 requires-python = "==3.14.*"
 dependencies = [
-    "ops ~= 3.0",
+    "ops ~= 3.8.1",
     "charmlibs-apt ~= 1.0",
     "charmed-hpc-libs[ops] ~= 0.1",
     "pydantic>=2",

@@ -99,6 +99,14 @@ def bootstrap_lustre_server(
     """
     # 3 units: 1x MGS+MDS, 2x OSS.
     juju.deploy(lustre_server, "lustre-server", base=base, num_units=3, to=[machine_id] * 3)
+
+    # Attach block storage to each unit:
+    # - MGS+MDS: even count of devices for mirrored vdevs
+    # - OSS units: >= 3 devices for RAIDZ2 vdev
+    juju.cli("add-storage", "lustre-server/0", "mgt-mdt=loop,2,1G")
+    juju.cli("add-storage", "lustre-server/1", "ost=loop,3,1G")
+    juju.cli("add-storage", "lustre-server/2", "ost=loop,3,1G")
+
     juju.wait(
         lambda status: jubilant.all_active(status, "lustre-server"),
         timeout=2000,

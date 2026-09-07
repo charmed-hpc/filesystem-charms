@@ -23,6 +23,9 @@ LUSTRE_PACKAGES = [
     "rdma-core",
 ]
 
+MGT_MDT_STORAGE = "mgt-mdt"
+OST_STORAGE = "ost"
+
 MKFS_LUSTRE_EXECUTABLE = "/usr/sbin/mkfs.lustre"
 MOUNT_EXECUTABLE = "/usr/bin/mount"
 TRUNCATE_EXECUTABLE = "/usr/bin/truncate"

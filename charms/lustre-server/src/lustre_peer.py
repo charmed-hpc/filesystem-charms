@@ -4,7 +4,6 @@
 
 """Peer relation observer for the Lustre charm."""
 
-import json
 import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -13,8 +12,8 @@ import lustre_fs
 import ops
 import pydantic
 from charms.filesystem_client.v0.filesystem_info import LustreInfo
-from constants import LUSTRE_FSNAME
-from errors import LustreFilesystemError, LustrePeerError
+from constants import LUSTRE_FSNAME, OST_STORAGE
+from errors import LustreFilesystemError, LustrePeerDuplicateMgsError, LustrePeerError
 from lustre_ops import lnet
 from lustre_ops.errors import LNetError
 from state import check_lustre
@@ -33,6 +32,7 @@ class _LustrePeerStatus(StrEnum):
     FAILED_OSS_SETUP = "Failed to set up OSS"
     FAILED_PUBLISH_FILESYSTEM_INFO = "Failed to publish filesystem info to peer relation"
     FAILED_SET_UNIT_READY = "Failed to set unit ready in peer relation"
+    MULTIPLE_MGS_UNITS = "Cluster error: multiple units have MGT+MDT storage attached"
 
 
 class LustrePeerAppData(pydantic.BaseModel):
@@ -56,10 +56,16 @@ class LustrePeerUnitData(pydantic.BaseModel):
 
     Attributes:
         ready: Whether this unit has completed Lustre service setup.
+        mgs_nids: LNet NIDs of this unit, if it is running as the MGS. To be
+        promoted to app data by the leader.
     """
 
     ready: bool = pydantic.Field(
         default=False, description="Whether this unit has completed Lustre service setup."
+    )
+    mgs_nids: list[str] = pydantic.Field(
+        default_factory=list,
+        description="LNet NIDs of this unit, if it is running as the MGS. Example: ['10.0.0.5@tcp'].",
     )
 
 
@@ -74,7 +80,12 @@ class LustrePeerObserver(ops.Object):
         )
 
     def mgs_nids_published(self) -> list[str]:
-        """Publish this unit as the MGS if no MGS has been assigned yet.
+        """Publish this unit's MGS NIDs to its unit databag.
+
+        The leader promotes these to app data when it observes the relation-changed
+        event triggered by this write. If this unit is itself the leader, no such
+        event will arrive (a unit does not receive relation-changed for writes to
+        its own databag), so it promotes itself immediately.
 
         Returns:
             The published MGS NID strings.
@@ -82,19 +93,6 @@ class LustrePeerObserver(ops.Object):
         Raises:
             LustrePeerError: If an error occurs publishing the MGS NIDs.
         """
-        if not self.model.unit.is_leader():
-            raise LustrePeerError("Non-leader attempted to publish MGS NID")
-
-        # Never overwrite. The original MGS unit must remain stable across leader re-elections.
-        data = self.get_app_data()
-        if data.mgs_unit_name and data.mgs_nids:
-            _logger.info(
-                "MGS already active on %s with NIDs %s. skipping publication",
-                data.mgs_unit_name,
-                data.mgs_nids,
-            )
-            return data.mgs_nids
-
         try:
             mgs_nids = lnet.get_nids()
         except LNetError as e:
@@ -103,14 +101,19 @@ class LustrePeerObserver(ops.Object):
         if not mgs_nids:
             raise LustrePeerError("No LNet NIDs configured on this unit")
 
+        data = self.get_unit_data()
         data.mgs_nids = mgs_nids
-        data.mgs_unit_name = self.model.unit.name
+        self.set_unit_data(data)
 
-        self._set_unit_ready()
-        self.set_app_data(data)
-        self._try_publish_filesystem_info(mgs_nids, LUSTRE_FSNAME)
-        _logger.info("Published MGS NIDs %s for unit %s", data.mgs_nids, data.mgs_unit_name)
-        return data.mgs_nids
+        if self.model.unit.is_leader():
+            # A relation-changed event is not triggered on the unit that writes to
+            # its own unit data, so the leader must ready itself rather than
+            # wait for an event that will never arrive.
+            self._promote_mgs_nids(self.model.unit.name, mgs_nids)
+            self.set_unit_ready()
+            self._try_publish_filesystem_info(mgs_nids, LUSTRE_FSNAME)
+
+        return mgs_nids
 
     def get_app_data(self) -> LustrePeerAppData:
         """Return the application data in the peer relation databag.
@@ -141,17 +144,7 @@ class LustrePeerObserver(ops.Object):
         """
         rel = self._get_relation_checked()
         unit = unit or self.model.unit
-
-        # Workaround for https://github.com/canonical/operator/issues/2591
-        # Custom decoder needed to prevent rel.load() from raising JSONDecodeError attempting to
-        # decode IP addresses included by default in unit data, example: {'ingress-address':
-        # '10.200.245.189'}.
-        def _decoder(value: str) -> str:
-            if not (value.startswith('"') and value.endswith('"')):
-                value = f'"{value}"'
-            return json.loads(value)
-
-        return rel.load(LustrePeerUnitData, unit, decoder=_decoder) or LustrePeerUnitData()
+        return rel.load(LustrePeerUnitData, unit) or LustrePeerUnitData()
 
     def set_unit_data(self, data: LustrePeerUnitData, unit: ops.Unit | None = None) -> None:
         """Set the unit data in the peer relation databag.
@@ -164,29 +157,32 @@ class LustrePeerObserver(ops.Object):
         unit = unit or self.model.unit
         rel.save(data, unit)
 
-    def _on_relation_changed(self, _: ops.RelationChangedEvent) -> None:
+    def set_unit_ready(self) -> None:
+        """Set calling unit as ready in its unit data."""
+        data = self.get_unit_data()
+        data.ready = True
+        self.set_unit_data(data)
+
+    def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         """Handle the peer relation changed event."""
+        if not self._try_promote_mgs(event):
+            return
+
         try:
             data = self.get_app_data()
         except LustrePeerError as e:
-            _logger.warning("Failed to get peer relation data: %s", e)
+            _logger.warning("failed to get peer relation data: %s", e)
             return
 
         if data.mgs_unit_name is None or not data.mgs_nids:
             _logger.warning("MGS data not yet published. cannot configure Lustre services.")
             return
 
-        # OSS service must not be enabled on MGS+MDS unit
-        if self.model.unit.name != data.mgs_unit_name:
-            try:
-                lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids)
-            except LustreFilesystemError as e:
-                _logger.exception("failed to set up OSS: %s", e)
-                self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_OSS_SETUP)
-                return
+        if not self._try_oss_setup(data):
+            return
 
         try:
-            self._set_unit_ready()
+            self.set_unit_ready()
         except LustrePeerError as e:
             _logger.exception("failed to set unit ready: %s", e)
             self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_SET_UNIT_READY)
@@ -249,11 +245,91 @@ class LustrePeerObserver(ops.Object):
             raise LustrePeerError("Peer relation not yet created")
         return rel
 
-    def _set_unit_ready(self) -> None:
-        """Set calling unit as ready in its unit data."""
-        data = self.get_unit_data()
-        data.ready = True
-        self.set_unit_data(data)
+    def _promote_mgs_nids(self, unit_name: str, mgs_nids: list[str]) -> None:
+        """Promote MGS NIDs from unit data to app data. Leader-only.
+
+        Never overwrites: the original MGS unit must remain stable across
+        leader re-elections.
+
+        Args:
+            unit_name: Name of the unit running the MGS.
+            mgs_nids: The MGS NIDs published by that unit.
+
+        Raises:
+            LustrePeerDuplicateMgsError: If another unit is already the assigned MGS.
+            LustrePeerError: If this unit's NIDs have changed since promotion.
+        """
+        data = self.get_app_data()
+        if data.mgs_unit_name and data.mgs_nids:
+            if data.mgs_unit_name == unit_name:
+                if sorted(data.mgs_nids) != sorted(mgs_nids):
+                    raise LustrePeerError(
+                        f"MGS NIDs changed for unit {unit_name}: {data.mgs_nids} -> {mgs_nids}"
+                    )
+                return  # Same unit re-publishing. Idempotent.
+            raise LustrePeerDuplicateMgsError(
+                f"Unit {unit_name} attempted to publish MGS NIDs. Unit {data.mgs_unit_name} is already the MGS. Multiple MGSes are not supported."
+            )
+
+        data.mgs_nids = mgs_nids
+        data.mgs_unit_name = unit_name
+        self.set_app_data(data)
+        _logger.info("promoted MGS NIDs %s from unit %s to app data", mgs_nids, unit_name)
+
+    def _try_oss_setup(self, data: LustrePeerAppData) -> bool:
+        """Set up OSS services on this unit if it is not the MGS+MDS unit.
+
+        Returns:
+            True to continue processing the event, False to stop.
+        """
+        # OSS service must not be enabled on MGS+MDS unit
+        if self.model.unit.name == data.mgs_unit_name:
+            return True
+
+        try:
+            devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
+        except ops.model.ModelError as e:
+            # Device not provisioned yet, such as after a reboot.
+            _logger.warning("OST storage not yet provisioned: %s", e)
+            return False
+
+        if not devices:
+            _logger.warning("no OST storage attached. cannot configure OSS services.")
+            return False
+
+        try:
+            lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids, devices)
+        except LustreFilesystemError as e:
+            _logger.exception("failed to set up OSS: %s", e)
+            self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_OSS_SETUP)
+            return False
+
+        return True
+
+    def _try_promote_mgs(self, event: ops.RelationChangedEvent) -> bool:
+        """Promote MGS NIDs to app data if leader and the event came from a peer unit.
+
+        Returns:
+            True to continue processing the event, False to stop.
+        """
+        if not (self.model.unit.is_leader() and event.unit is not None):
+            # event.unit is None when the application databag changed (e.g. the
+            # leader's own promotion write), in which case there is nothing to promote.
+            return True
+
+        try:
+            unit_data = self.get_unit_data(event.unit)
+            if unit_data.mgs_nids:
+                self._promote_mgs_nids(event.unit.name, unit_data.mgs_nids)
+        except LustrePeerDuplicateMgsError as e:
+            _logger.exception("multiple units attempting to run MGS+MDS: %s", e)
+            self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.MULTIPLE_MGS_UNITS)
+            return False
+        except LustrePeerError as e:
+            _logger.exception("failed to promote MGS NIDs: %s", e)
+            return False
+
+        return True
 
     def _try_publish_filesystem_info(self, mgs_nids: list[str], fs_name: str) -> None:
         """Publish Lustre info to the filesystem relation only if all units in the cluster are ready."""
