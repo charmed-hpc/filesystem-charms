@@ -18,11 +18,17 @@ from constants import (
     FILESYSTEM_RELATION,
     LUSTRE_FSNAME,
     LUSTRE_PACKAGES,
+    MGT_MDT_STORAGE,
+    OST_STORAGE,
 )
-from errors import LustreFilesystemError, LustrePeerError
+from errors import (
+    LustreFilesystemError,
+    LustrePeerDuplicateMgsError,
+    LustrePeerError,
+)
 from lustre_ops import lnet, ppa
 from lustre_ops.errors import LNetError, RepositoryError
-from lustre_peer import LustrePeerObserver
+from lustre_peer import LustrePeerAppData, LustrePeerObserver
 from state import check_lustre
 
 logger = logging.getLogger(__name__)
@@ -41,7 +47,15 @@ class _CharmStatus(StrEnum):
     STARTING_SERVICES = "Starting Lustre services"
     FAILED_PEER_DATA = "Failed to get peer relation app data"
     FAILED_MGS_MDS_SETUP = "Failed to set up MGS+MDS"
-    FAILED_SERVICE_SETUP = "Failed to start Lustre services"
+    FAILED_OSS_SETUP = "Failed to set up OSS"
+    MULTIPLE_MGS_UNITS = "Cluster error: multiple units have MGT+MDT storage attached"
+    WAITING_FOR_STORAGE = "Waiting for storage to be provisioned"
+    DUPLICATE_STORAGE_ERROR = (
+        f"Storage '{MGT_MDT_STORAGE}' and '{OST_STORAGE}' cannot be attached to the same unit"
+    )
+    NO_STORAGE_ATTACHED = (
+        f"No storage attached. Add '{MGT_MDT_STORAGE}' or '{OST_STORAGE}' to this unit"
+    )
 
     _FAILED_INSTALL_TEMPLATE = "Failed to install packages: {packages}"
 
@@ -70,6 +84,8 @@ class LustreCharm(ops.CharmBase):
         framework.observe(self.on.install, self._on_install)
         framework.observe(self.on.start, self._on_start)
         framework.observe(self.on.update_status, self._on_update_status)
+        for name in (MGT_MDT_STORAGE, OST_STORAGE):
+            framework.observe(self.on[name].storage_attached, self._on_start)
 
     def _on_install(self, _: ops.InstallEvent):
         """Install Lustre packages."""
@@ -102,8 +118,12 @@ class LustreCharm(ops.CharmBase):
         self.unit.status = ops.MaintenanceStatus(_CharmStatus.PREPARING_SERVICES)
 
     @refresh_check_lustre
-    def _on_start(self, _: ops.StartEvent):
+    def _on_start(self, _: ops.StartEvent | ops.StorageAttachedEvent) -> None:
         """Set up Lustre services."""
+        if not lustre_fs.is_lustre_installed():
+            logger.warning("attempted to start services before Lustre packages installed")
+            return
+
         self.unit.status = ops.MaintenanceStatus(_CharmStatus.STARTING_SERVICES)
 
         try:
@@ -112,35 +132,52 @@ class LustreCharm(ops.CharmBase):
             logger.exception("failed to read peer relation data: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_PEER_DATA))
 
-        mgs_unit = data.mgs_unit_name
-        mgs_nids = data.mgs_nids
-
-        if mgs_unit is None or not mgs_nids:
-            # No MGS has been published yet. This is initial deployment.
-            if self.unit.is_leader():
-                # Initial leader is MGS+MDS for lifetime of deployment.
-                try:
-                    lustre_fs.mgs_mds_setup(LUSTRE_FSNAME)
-                    self.peers.mgs_nids_published()
-                except (LustrePeerError, LustreFilesystemError) as e:
-                    logger.exception("failed to set up MGS+MDS: %s", e)
-                    raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_MGS_MDS_SETUP))
-
-            # Initial non-leaders are OSSes and must wait for leader to publish MGS info in the peer
-            # relation before starting.
+        try:
+            mgt_mdt_devices = sorted(
+                [str(s.location) for s in self.model.storages[MGT_MDT_STORAGE]]
+            )
+            ost_devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
+        except ops.model.ModelError as e:
+            # Storage is registered in the model is not provisioned yet. Can
+            # occur when block devices are not yet re-attached after a reboot.
+            logger.warning("storage not yet provisioned: %s", e)
+            self.unit.status = ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_STORAGE)
             return
 
-        # MGS is already published. This is a restart or a slow OSS initial deployment.
+        if mgt_mdt_devices and ost_devices:
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.DUPLICATE_STORAGE_ERROR))
+
+        if mgt_mdt_devices:
+            self._become_mgs_mds(mgt_mdt_devices)
+        elif ost_devices:
+            self._become_oss(ost_devices, data)
+        else:
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.NO_STORAGE_ATTACHED))
+
+    def _become_mgs_mds(self, devices: list[str]) -> None:
+        """Set up this unit as MGS+MDS. Idempotent."""
         try:
-            if self.model.unit.name == mgs_unit:
-                lustre_fs.mgs_mds_setup(LUSTRE_FSNAME)
-            else:
-                # If this is a slow initial deployment, OSS will still need to wait for the peer
-                # relation event that marks itself ready before any filesystem info is published.
-                lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, mgs_nids)
-        except LustreFilesystemError as e:
-            logger.exception("failed to set up Lustre services: %s", e)
-            raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_SERVICE_SETUP))
+            lustre_fs.mgs_mds_setup(LUSTRE_FSNAME, devices)
+            _ = self.peers.mgs_nids_published()
+        except LustrePeerDuplicateMgsError as e:
+            logger.exception("multiple units attempting to run MGS+MDS: %s", e)
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.MULTIPLE_MGS_UNITS))
+        except (LustrePeerError, LustreFilesystemError) as e:
+            logger.exception("failed to set up MGS+MDS: %s", e)
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_MGS_MDS_SETUP))
+
+    def _become_oss(self, devices: list[str], data: LustrePeerAppData) -> None:
+        """Set up this unit as an OSS. Idempotent."""
+        if data.mgs_unit_name is None or not data.mgs_nids:
+            # No MGS to configure against yet. Wait for the peer relation to change.
+            return
+
+        try:
+            lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids, devices)
+            self.peers.set_unit_ready(data.mgs_nids, LUSTRE_FSNAME)
+        except (LustrePeerError, LustreFilesystemError) as e:
+            logger.exception("failed to set up OSS: %s", e)
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_OSS_SETUP))
 
     @refresh_check_lustre
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:

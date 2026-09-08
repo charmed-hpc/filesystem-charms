@@ -15,7 +15,6 @@ from constants import (
     LUSTRE_OST_PARENT_DIRECTORY,
     MKFS_LUSTRE_EXECUTABLE,
     MOUNT_EXECUTABLE,
-    TRUNCATE_EXECUTABLE,
     ZFS_EXECUTABLE,
     ZPOOL_EXECUTABLE,
 )
@@ -24,11 +23,27 @@ from errors import LustreFilesystemError
 _logger = logging.getLogger(__name__)
 
 
-def mgs_mds_setup(fsname: str) -> None:
+def is_lustre_installed() -> bool:
+    """Check if Lustre packages are installed on this unit.
+
+    Returns:
+        True if Lustre is installed and functioning, False otherwise.
+    """
+    try:
+        result = subprocess.run(
+            [MKFS_LUSTRE_EXECUTABLE, "--version"], capture_output=True, text=True
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def mgs_mds_setup(fsname: str, devices: list[str]) -> None:
     """Set up the MGT and MDT on this unit. Idempotent.
 
     Args:
         fsname: Lustre filesystem name.
+        devices: Device paths for the MGT+MDT mirror zpool.
 
     Raises:
         LustreFilesystemError: If MGS+MDS setup fails.
@@ -39,8 +54,6 @@ def mgs_mds_setup(fsname: str) -> None:
     _logger.info(
         "Ensuring this unit is running MGS+MDS on pool '%s' and dataset '%s'", pool, dataset
     )
-
-    devices = _detect_devices(pool)
 
     try:
         _mgt_mdt_zpool(pool, devices)
@@ -55,13 +68,14 @@ def mgs_mds_setup(fsname: str) -> None:
     _logger.info("MGS+MDS on pool '%s' and dataset '%s' ready", pool, dataset)
 
 
-def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str]) -> None:
+def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str], devices: list[str]) -> None:
     """Set up an OSS on this unit. Idempotent.
 
     Args:
         fsname: Lustre filesystem name.
         unit_name: Name of this unit.
         mgs_nids: MGS NIDs to use for this OSS.
+        devices: Device paths for the OST RAIDZ2 zpool.
 
     Raises:
         LustreFilesystemError: If OSS setup fails.
@@ -90,8 +104,6 @@ def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str]) -> None:
         mgs_nids_str,
     )
 
-    devices = _detect_devices(pool)
-
     try:
         _ost_zpool(pool, devices)
     except ValueError as e:
@@ -105,33 +117,6 @@ def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str]) -> None:
     _mount(pool, dataset, Path(LUSTRE_OST_PARENT_DIRECTORY) / dataset)
 
     _logger.info("OST index '%s' for MGS NIDs '%s' ready", ost_index, mgs_nids_str)
-
-
-def _detect_devices(owner: str) -> list[str]:
-    """Detect available block devices for use in pools. Placeholder for actual device detection logic.
-
-    Args:
-        owner: The owner ZFS pool name, used to generate file names for the temporary image files
-        used as block devices.
-
-    Returns:
-        A list of device path strings to be used for zpool creation.
-
-    Raises:
-        LustreFilesystemError: If device detection fails.
-    """
-    # TODO: For MVP, return a fixed list of image files as block devices. Replace with actual device detection in production.
-    devices = []
-    for num in range(4):
-        image = Path(f"/root/{owner}-disk{num}.img")
-        if not image.exists():
-            try:
-                subprocess.run([TRUNCATE_EXECUTABLE, "-s", "1G", image], check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                raise LustreFilesystemError(f"Failed to create image file {image}") from e
-        devices.append(str(image))
-
-    return devices
 
 
 def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:

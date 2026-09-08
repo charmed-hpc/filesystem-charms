@@ -53,6 +53,24 @@ provides:
   filesystem:
     interface: filesystem_info
 
+storage:
+  mgt-mdt:
+    type: block
+    description: |
+        Block storage for MGT+MDT (MGS+MDS unit only). Count must be even as storage is grouped
+        into a zpool of mirror vdevs.
+    minimum-size: 1G
+    multiple:
+      range: 0-
+  ost:
+    type: block
+    description: |
+        Block storage for OST (OSS units). Count must be >=3 as storage is grouped into a zpool of
+        a RAIDZ2 vdev.
+    minimum-size: 1G
+    multiple:
+      range: 0-
+
 config:
   options:
     lnet-networks:

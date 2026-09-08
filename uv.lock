@@ -173,7 +173,7 @@ requires-dist = [
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "jubilant", marker = "extra == 'dev'" },
     { name = "lustre-ops", editable = "internal/lustre-ops" },
-    { name = "ops", specifier = "~=3.0" },
+    { name = "ops", specifier = "~=3.8.1" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pyright", marker = "extra == 'dev'" },
@@ -290,16 +290,16 @@ wheels = [
 
 [[package]]
 name = "ops"
-version = "3.8.0"
+version = "3.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "opentelemetry-api" },
     { name = "pyyaml" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/e4/70ed4f3dc41b2d626ef38ffc7c2418b680f0c7f0ddf0a4410572903734df/ops-3.8.0.tar.gz", hash = "sha256:bdbf4bbcd0622acade9ef0b156ddefc31be59f0ef55d563081a094cf7dd6665c", size = 606170, upload-time = "2026-06-30T03:24:48.612Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/85/0a/6e5730c50c1737b505ccd0d7bc3c53c625745a75aae9faa2fe635ea7a473/ops-3.8.2.tar.gz", hash = "sha256:a516e76a76fdfd4a37f26f2b9956c332b56bda72014c8565ceb4f6deb137407f", size = 610712, upload-time = "2026-08-31T04:37:49.011Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/70/234d31bdee92d89fd7a4e0944283469a88fad5ea23e2ad449d6ce1256b53/ops-3.8.0-py3-none-any.whl", hash = "sha256:03f788091b10c5ed37a0a290e814b1a90aa0dcec6006a87875a085072df2261d", size = 215545, upload-time = "2026-06-30T03:24:43.916Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/4c/ddaef2a0f8d208aed071087b61e6984bb8507cf202c965025446cf4cce8a/ops-3.8.2-py3-none-any.whl", hash = "sha256:dcead2241d17921441123425072dd6adddf5f337dc6d6fd2b3ba1fd60a0af822", size = 215761, upload-time = "2026-08-31T04:37:45.153Z" },
 ]
 
 [package.optional-dependencies]
@@ -309,16 +309,16 @@ testing = [
 
 [[package]]
 name = "ops-scenario"
-version = "8.8.0"
+version = "8.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/43/0f12c71563810b5121b2f9432890c517f8f97f592cc86a1ea6c7835ef5c9/ops_scenario-8.8.0.tar.gz", hash = "sha256:3140fe256c68ac4d2d498cfe1cadb7f7e8a0a9687090bb137883ad8b7096cb96", size = 83463, upload-time = "2026-06-30T03:24:49.733Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/06/fc2da6f27a9831b11ed55420b0d65720f6b96ee324fcea0e699e4e01b7ea/ops_scenario-8.8.2.tar.gz", hash = "sha256:4d9c8371ae02064352f852dda4cccd0fb825b8184f26ae2150c8b5bc1032c6b9", size = 86981, upload-time = "2026-08-31T04:37:50.287Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/db/adf8fa05fc609d9a261c28b6b320c140eb635a95e056f5a2f9ae255c6aff/ops_scenario-8.8.0-py3-none-any.whl", hash = "sha256:088f0c5713d330b92762c4853a32a9482f4a162667d9d475edf924ce2510a3f0", size = 72696, upload-time = "2026-06-30T03:24:45.626Z" },
+    { url = "https://files.pythonhosted.org/packages/15/15/abe6b080341cd6db8c9d1d7124903c48361f3cf783c8d8a08043560f1e1a/ops_scenario-8.8.2-py3-none-any.whl", hash = "sha256:4e2a8edc04e169739e0769a4cec0acbd6e0d82d771a3e5617223a9f537f3128a", size = 74916, upload-time = "2026-08-31T04:37:46.657Z" },
 ]
 
 [[package]]

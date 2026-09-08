@@ -38,19 +38,38 @@ def pool_exists(mocker: MockerFixture) -> None:
     mocker.patch("lustre_fs._pool_exists", return_value=True)
 
 
+class TestIsLustreInstalled:
+    """is_lustre_installed() tests."""
+
+    def test_installed(self, mock_run: MagicMock) -> None:
+        """Returns True when the Lustre packages are installed."""
+        mock_run.return_value = MagicMock(returncode=0)
+        assert lustre_fs.is_lustre_installed()
+
+    def test_not_installed(self, mock_run: MagicMock) -> None:
+        """Returns False when running the check for Lustre packages fails."""
+        mock_run.return_value = MagicMock(returncode=1)
+        assert not lustre_fs.is_lustre_installed()
+
+    def test_executable_missing(self, mock_run: MagicMock) -> None:
+        """Returns False when the Lustre test executable is not present."""
+        mock_run.side_effect = FileNotFoundError()
+        assert not lustre_fs.is_lustre_installed()
+
+
 class TestMgsMdsSetup:
     """mgs_mds_setup() tests."""
 
     FSNAME = "testfs"
+    DEVICES = ["/dev/0", "/dev/1"]
 
     def test_correct_pool_and_dataset(self, mocker: MockerFixture) -> None:
         """Correct pool and dataset names are used for MGS/MDT setup."""
-        mocker.patch("lustre_fs._detect_devices", return_value=["/dev/0", "/dev/1"])
         mocker.patch("lustre_fs._mgt_mdt_zpool")
         mock_target = mocker.patch("lustre_fs._lustre_target", autospec=True)
         mocker.patch("lustre_fs._mount")
 
-        lustre_fs.mgs_mds_setup(self.FSNAME)
+        lustre_fs.mgs_mds_setup(self.FSNAME, self.DEVICES)
 
         _, pool, dataset, index = mock_target.call_args[0]
         assert (pool, dataset, index) == (
@@ -61,11 +80,10 @@ class TestMgsMdsSetup:
 
     def test_zpool_failure(self, mocker: MockerFixture) -> None:
         """Zpool creation failure."""
-        mocker.patch("lustre_fs._detect_devices", return_value=["/dev/0", "/dev/1"])
         mocker.patch("lustre_fs._mgt_mdt_zpool", side_effect=ValueError("failure"))
 
         with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs.mgs_mds_setup(self.FSNAME)
+            lustre_fs.mgs_mds_setup(self.FSNAME, self.DEVICES)
         assert isinstance(excinfo.value.__cause__, ValueError)
 
 
@@ -74,15 +92,15 @@ class TestOssSetup:
 
     FSNAME = "testfs"
     MGS_NID = "10.0.0.1@tcp"
+    DEVICES = ["/dev/0", "/dev/1", "/dev/2"]
 
     def test_correct_pool_and_index(self, mocker: MockerFixture) -> None:
         """Correct pool and dataset names are used for OST setup."""
-        mocker.patch("lustre_fs._detect_devices", return_value=["/dev/0", "/dev/1", "/dev/2"])
         mocker.patch("lustre_fs._ost_zpool")
         mock_target = mocker.patch("lustre_fs._lustre_target", autospec=True)
         mocker.patch("lustre_fs._mount")
 
-        lustre_fs.oss_setup(self.FSNAME, "lustre/2", self.MGS_NID)
+        lustre_fs.oss_setup(self.FSNAME, "lustre/2", self.MGS_NID, self.DEVICES)
 
         _, pool, dataset, index = mock_target.call_args[0]
         assert (pool, dataset, index) == (
@@ -93,19 +111,17 @@ class TestOssSetup:
 
     def test_bad_unit_name_raises(self, mocker: MockerFixture) -> None:
         """Bad unit name raises an error."""
-        mocker.patch("lustre_fs._detect_devices", return_value=["/dev/0", "/dev/1", "/dev/2"])
-
         with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs.oss_setup(self.FSNAME, "badname", self.MGS_NID)
+            lustre_fs.oss_setup(self.FSNAME, "badname", self.MGS_NID, self.DEVICES)
         assert isinstance(excinfo.value.__cause__, IndexError)
 
     def test_zpool_failure(self, mocker: MockerFixture) -> None:
         """Zpool creation failure."""
-        mocker.patch("lustre_fs._detect_devices", return_value=["/dev/0", "/dev/1"])
+        devices = ["/dev/0", "/dev/1"]
         mocker.patch("lustre_fs._ost_zpool", side_effect=ValueError("failure"))
 
         with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID)
+            lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID, devices)
         assert isinstance(excinfo.value.__cause__, ValueError)
 
 
@@ -290,50 +306,6 @@ class TestMount:
         with pytest.raises(LustreFilesystemError) as excinfo:
             lustre_fs._mount("pool", "dataset", mountpoint_tmp)
         assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
-
-
-class TestDetectDevices:
-    """_detect_devices() tests."""
-
-    # TODO: Placeholder tests until actual device detection logic is implemented.
-
-    def test_creates_missing_images(
-        self, mocker: MockerFixture, tmp_path: Path, mock_run: MagicMock
-    ) -> None:
-        """Creates missing image files for devices."""
-        # Patch Path to avoid accessing /root.
-        mocker.patch("lustre_fs.Path", side_effect=lambda p: Path(tmp_path) / Path(p).name)
-
-        devices = lustre_fs._detect_devices("")
-
-        assert len(devices) == 4
-
-    def test_truncate_run_error(
-        self, mocker: MockerFixture, tmp_path: Path, mock_run: MagicMock
-    ) -> None:
-        """Truncate command fails."""
-        mocker.patch("lustre_fs.Path", side_effect=lambda p: Path(tmp_path) / Path(p).name)
-        mock_run.side_effect = subprocess.CalledProcessError(1, "truncate")
-
-        with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._detect_devices("")
-        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
-
-    def test_skip_existing_images(
-        self, mocker: MockerFixture, tmp_path: Path, mock_run: MagicMock
-    ) -> None:
-        """Skips creating image files that already exist."""
-        # Create existing image files.
-        prefix = "image-prefix"
-        for num in range(4):
-            (tmp_path / f"{prefix}-disk{num}.img").touch()
-
-        mocker.patch("lustre_fs.Path", side_effect=lambda p: Path(tmp_path) / Path(p).name)
-
-        devices = lustre_fs._detect_devices(prefix)
-
-        assert len(devices) == 4
-        mock_run.assert_not_called()
 
 
 class TestPoolExists:

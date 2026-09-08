@@ -81,13 +81,7 @@ def test_lustre(juju: jubilant.Juju, server_app: str) -> None:
     juju.integrate(f"{MOUNT_PROVIDER}:filesystem", f"{server_app}:filesystem")
     juju.wait(
         lambda status: jubilant.all_active(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
-        error=lambda status: (
-            jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
-            or (
-                jubilant.all_agents_idle(status)
-                and jubilant.any_blocked(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER)
-            )
-        ),
+        error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT, MOUNT_PROVIDER),
     )
 
     check_files(juju, "ubuntu/0", "/lustre")
