@@ -30,7 +30,6 @@ class _LustrePeerStatus(StrEnum):
     """Charm status messages for the Lustre peer observer."""
 
     FAILED_OSS_SETUP = "Failed to set up OSS"
-    FAILED_PUBLISH_FILESYSTEM_INFO = "Failed to publish filesystem info to peer relation"
     FAILED_SET_UNIT_READY = "Failed to set unit ready in peer relation"
     MULTIPLE_MGS_UNITS = "Cluster error: multiple units have MGT+MDT storage attached"
 
@@ -110,8 +109,7 @@ class LustrePeerObserver(ops.Object):
             # its own unit data, so the leader must ready itself rather than
             # wait for an event that will never arrive.
             self._promote_mgs_nids(self.model.unit.name, mgs_nids)
-            self.set_unit_ready()
-            self._try_publish_filesystem_info(mgs_nids, LUSTRE_FSNAME)
+            self.set_unit_ready(mgs_nids, LUSTRE_FSNAME)
 
         return mgs_nids
 
@@ -157,11 +155,16 @@ class LustrePeerObserver(ops.Object):
         unit = unit or self.model.unit
         rel.save(data, unit)
 
-    def set_unit_ready(self) -> None:
+    def set_unit_ready(self, mgs_nids: list[str], fs_name: str) -> None:
         """Set calling unit as ready in its unit data."""
         data = self.get_unit_data()
         data.ready = True
         self.set_unit_data(data)
+
+        # Always attempt to publish filesystem info after a readiness change.
+        # If not set directly here by the leader, it will be set when the leader
+        # observes the relation-changed event.
+        self._try_publish_filesystem_info(mgs_nids, fs_name)
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         """Handle the peer relation changed event."""
@@ -182,34 +185,11 @@ class LustrePeerObserver(ops.Object):
             return
 
         try:
-            self.set_unit_ready()
+            self.set_unit_ready(data.mgs_nids, LUSTRE_FSNAME)
         except LustrePeerError as e:
             _logger.exception("failed to set unit ready: %s", e)
             self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_SET_UNIT_READY)
             return
-
-        if self.model.unit.is_leader():
-            # This call to `_try_publish_filesystem_info` must occur after the call to
-            # `_set_unit_ready` above.
-            #
-            # Filesystem info is published only after every unit has reported ready by calling
-            # `_set_unit_ready`. This writes a value to the peer relation unit data, which
-            # triggers a relation-changed event on *other* units, meaning the leader repeatedly
-            # retries the publish here as each unit reports ready.
-            #
-            # A relation-changed event is *not* triggered on the unit that writes to its own unit
-            # data. In the case where the leader is an OSS and the last unit to become ready, no
-            # further event will arrive to trigger the publish. This case is addressed by ensuring
-            # the publish attempt occurs after the unit sets itself ready, so no further event is
-            # needed.
-            try:
-                self._try_publish_filesystem_info(data.mgs_nids, LUSTRE_FSNAME)
-            except LustrePeerError as e:
-                _logger.exception("failed to publish filesystem info: %s", e)
-                self.model.unit.status = ops.BlockedStatus(
-                    _LustrePeerStatus.FAILED_PUBLISH_FILESYSTEM_INFO
-                )
-                return
 
         # FIXME: Cannot use @refresh decorator here due to `AttributeError: 'LustrePeer' object
         # has no attribute 'unit'`. Set status directly for now.
@@ -333,6 +313,10 @@ class LustrePeerObserver(ops.Object):
 
     def _try_publish_filesystem_info(self, mgs_nids: list[str], fs_name: str) -> None:
         """Publish Lustre info to the filesystem relation only if all units in the cluster are ready."""
+        if not self.model.unit.is_leader():
+            _logger.debug("not leader, skipping publish of filesystem info")
+            return
+
         if not self._all_units_ready():
             _logger.debug("not all units ready yet, waiting to set filesystem info")
             return

@@ -174,7 +174,7 @@ class LustreCharm(ops.CharmBase):
 
         try:
             lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids, devices)
-            self.peers.set_unit_ready()
+            self.peers.set_unit_ready(data.mgs_nids, LUSTRE_FSNAME)
         except (LustrePeerError, LustreFilesystemError) as e:
             logger.exception("failed to set up OSS: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_OSS_SETUP))

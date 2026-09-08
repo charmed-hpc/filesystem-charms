@@ -62,9 +62,6 @@ class TestMgsNidsPublished:
         set_unit_data = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
         set_app_data = mocker.patch("lustre_peer.LustrePeerObserver.set_app_data")
         set_ready = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready")
-        publish_fs_info = mocker.patch(
-            "lustre_peer.LustrePeerObserver._try_publish_filesystem_info"
-        )
 
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         result = observer.mgs_nids_published()
@@ -78,10 +75,10 @@ class TestMgsNidsPublished:
         assert app_data.mgs_nids == MGS_NIDS
         assert app_data.mgs_unit_name == MGS_UNIT_NAME
 
-        # A relation-changed event is not triggered on the unit that writes to its
-        # own unit data, so the leader must ready itself and attempt the publish here.
-        set_ready.assert_called_once()
-        publish_fs_info.assert_called_once()
+        # A relation-changed event is not triggered on the unit that writes to
+        # its own unit data, so the leader must ready itself here. The publish
+        # attempt is included in set_unit_ready.
+        set_ready.assert_called_once_with(MGS_NIDS, LUSTRE_FSNAME)
 
     def test_non_leader_publishes_unit_data_only(
         self, mocker: MockerFixture, mock_model: MagicMock
@@ -359,7 +356,7 @@ class TestOnRelationChanged:
         """Leader OSS unit filesystem info publishing attempt fails."""
         model, _ = oss_unit
         model.unit.is_leader.return_value = True
-        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready")
+        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
         mocker.patch(
             "lustre_peer.LustrePeerObserver._try_publish_filesystem_info",
             side_effect=lustre_peer.LustrePeerError("publish failed"),
@@ -368,8 +365,10 @@ class TestOnRelationChanged:
         observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         observer._on_relation_changed(app_data_event)
 
+        # The publish failure propagates from set_unit_ready and is reported
+        # as a failure to set the unit ready.
         assert model.unit.status == ops.BlockedStatus(
-            lustre_peer._LustrePeerStatus.FAILED_PUBLISH_FILESYSTEM_INFO
+            lustre_peer._LustrePeerStatus.FAILED_SET_UNIT_READY
         )
 
     @pytest.fixture(scope="function")
